@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel a superseded run rather than paying for both.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Lint, typecheck, test, build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # The integration suite runs against PGlite — real Postgres, in-process —
+      # so no service container and no connection string are needed. The
+      # migrations, the constraint trigger and the accounting are all exercised
+      # exactly as they ship.
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+  android:
+    name: Android build
+    runs-on: ubuntu-latest
+    # Only on main: it is slow, and a broken web build fails `verify` first.
+    if: github.ref == 'refs/heads/main'
+    needs: verify
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: android-actions/setup-android@v3
+
+      - run: npm ci
+
+      - name: Build web assets
+        run: npm run build
+        env:
+          CAPACITOR_SERVER_URL: ${{ vars.CAPACITOR_SERVER_URL }}
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+        env:
+          CAPACITOR_SERVER_URL: ${{ vars.CAPACITOR_SERVER_URL }}
+
+      - name: Assemble debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+
+      # An unsigned debug APK, so the widget and reminders can be tried on a
+      # real phone without anyone needing Android Studio installed.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ledger-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error

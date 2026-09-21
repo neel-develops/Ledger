@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The medium widget: the whole position at a glance, then the three things
+  you actually record, one tap away.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/widget_background"
+    android:padding="16dp">
+
+    <TextView
+        android:id="@+id/widget_amount"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="—"
+        android:textColor="#FF16161A"
+        android:textSize="28sp"
+        android:textStyle="bold"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:fontFamily="sans-serif-medium" />
+
+    <TextView
+        android:id="@+id/widget_caption"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="1dp"
+        android:text="Total money"
+        android:textColor="#FF8E8E98"
+        android:textSize="12sp"
+        android:maxLines="1"
+        android:ellipsize="end" />
+
+    <!-- Where it sits, and who it is between -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:orientation="horizontal"
+        android:baselineAligned="false">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Cash"
+                android:textColor="#FF8E8E98"
+                android:textSize="11sp" />
+            <TextView
+                android:id="@+id/widget_cash_value"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="—"
+                android:textColor="#FF16161A"
+                android:textSize="14sp"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:fontFamily="sans-serif-medium" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Digital"
+                android:textColor="#FF8E8E98"
+                android:textSize="11sp" />
+            <TextView
+                android:id="@+id/widget_digital_value"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="—"
+                android:textColor="#FF16161A"
+                android:textSize="14sp"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:fontFamily="sans-serif-medium" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Owe me"
+                android:textColor="#FF8E8E98"
+                android:textSize="11sp" />
+            <TextView
+                android:id="@+id/widget_owed_value"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="—"
+                android:textColor="#FF1C8F5F"
+                android:textSize="14sp"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:fontFamily="sans-serif-medium" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="I owe"
+                android:textColor="#FF8E8E98"
+                android:textSize="11sp" />
+            <TextView
+                android:id="@+id/widget_owing_value"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="—"
+                android:textColor="#FFC0453C"
+                android:textSize="14sp"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:fontFamily="sans-serif-medium" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Quick actions -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/widget_add_expense"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_weight="1"
+            android:layout_marginEnd="6dp"
+            android:background="@drawable/widget_accent_button"
+            android:gravity="center"
+            android:text="+ Expense"
+            android:textColor="#FFFFFFFF"
+            android:textSize="12sp"
+            android:fontFamily="sans-serif-medium" />
+
+        <TextView
+            android:id="@+id/widget_add_received"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_weight="1"
+            android:layout_marginEnd="6dp"
+            android:background="@drawable/widget_button"
+            android:gravity="center"
+            android:text="+ Received"
+            android:textColor="#FF4644B8"
+            android:textSize="12sp"
+            android:fontFamily="sans-serif-medium" />
+
+        <TextView
+            android:id="@+id/widget_add_transfer"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_weight="1"
+            android:background="@drawable/widget_button"
+            android:gravity="center"
+            android:text="Transfer"
+            android:textColor="#FF4644B8"
+            android:textSize="12sp"
+            android:fontFamily="sans-serif-medium" />
+    </LinearLayout>
+
+</LinearLayout>

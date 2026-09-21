@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Resizable from a 2x1 tile up to a full-width 4x2 panel. The provider picks
+  the small or medium layout from the height it is actually given, so the
+  widget always shows as much as it has room for and no more.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="180dp"
+    android:minHeight="60dp"
+    android:minResizeWidth="140dp"
+    android:minResizeHeight="60dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="1"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen"
+    android:initialLayout="@layout/widget_small"
+    android:previewLayout="@layout/widget_medium"
+    android:description="@string/widget_description"
+    android:updatePeriodMillis="1800000" />

@@ -1,0 +1,70 @@
+node_modules/
+dist/
+dist-ssr/
+.vercel/
+*.local
+
+# Secrets. Never commit these.
+.env
+.env.*
+!.env.example
+
+# Editors / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Logs
+*.log
+npm-debug.log*
+.pglite/
+.tmp/
+local.properties
+
+# Android
+android/local.properties
+android/.gradle/
+android/build/
+android/app/build/
+android/app/src/main/assets/public/
+android/capacitor-cordova-android-plugins/
+*.keystore
+*.jks
+
+# Vendored dev-time skills (installed with `npx skills add emilkowalski/skill`).
+# Third-party content and a local authoring aid, not part of the application.
+.agents/
+skills/
+skills-lock.json
+
+# Symlink farms that `skills add` creates for other agent tools.
+.adal/
+.agent/
+.augment/
+.claude/
+.codebuddy/
+.commandcode/
+.continue/
+.cortex/
+.crush/
+.factory/
+.goose/
+.iflow/
+.junie/
+.kilocode/
+.kiro/
+.kode/
+.mcpjam/
+.mux/
+.neovate/
+.pi/
+.pochi/
+.qoder/
+.qwen/
+.roo/
+.trae/
+.vibe/
+.windsurf/
+.zencoder/

@@ -1,0 +1,93 @@
+import express, { type Express } from 'express';
+import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
+import { toNodeHandler } from 'better-auth/node';
+import { getAuth } from './auth';
+import { createApiRouter } from './routes';
+import { errorHandler, authLimiter, toHeaders } from './http/middleware';
+import { env, isProduction, hasDatabase } from './env';
+
+export function createApp(): Express {
+  const app = express();
+
+  app.set('trust proxy', 1);
+  app.disable('x-powered-by');
+
+  /* -------------------------------- security ------------------------------- */
+
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        useDefaults: false,
+        directives: {
+          defaultSrc: ["'self'"],
+          // Vite injects styles at runtime; scripts stay strictly same-origin.
+          scriptSrc: ["'self'"],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
+          fontSrc: ["'self'", 'data:'],
+          connectSrc: ["'self'", ...(env.SUPABASE_URL ? [env.SUPABASE_URL] : [])],
+          objectSrc: ["'none'"],
+          frameAncestors: ["'none'"],
+          baseUri: ["'self'"],
+          formAction: ["'self'"],
+          ...(isProduction ? { upgradeInsecureRequests: [] } : {}),
+        },
+      },
+      crossOriginEmbedderPolicy: false,
+      referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+      hsts: isProduction ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false,
+    }),
+  );
+
+  app.use(cookieParser());
+
+  /**
+   * The app is same-origin in every environment (Vite proxies /api in dev,
+   * Vercel routes /api in production), so there is no CORS allowance to grant
+   * and no cross-site request can carry the session cookie.
+   */
+  app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    if (origin && origin !== env.APP_URL && req.method !== 'GET' && req.method !== 'HEAD') {
+      res.status(403).json({
+        error: { code: 'forbidden_origin', message: 'That request did not come from this app.' },
+      });
+      return;
+    }
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+    next();
+  });
+
+  /* ------------------------------ authentication --------------------------- */
+
+  if (hasDatabase) {
+    // Better Auth owns its own body parsing, so it is mounted before express.json.
+    app.all('/api/auth/sign-in/*', authLimiter);
+    app.all('/api/auth/sign-up/*', authLimiter);
+    app.all('/api/auth/forget-password', authLimiter);
+    app.all('/api/auth/reset-password', authLimiter);
+    app.all('/api/auth/*', toNodeHandler(getAuth()));
+  } else {
+    app.all('/api/auth/*', (_req, res) => {
+      res.status(503).json({
+        error: {
+          code: 'database_unavailable',
+          message: 'Accounts are unavailable until the ledger database is configured.',
+        },
+      });
+    });
+  }
+
+  /* ---------------------------------- api ---------------------------------- */
+
+  app.use(express.json({ limit: '25mb' }));
+  app.use('/api', createApiRouter());
+
+  app.use(errorHandler);
+
+  return app;
+}
+
+export { toHeaders };

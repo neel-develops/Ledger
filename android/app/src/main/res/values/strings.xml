@@ -1,0 +1,9 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Ledger</string>
+    <string name="title_activity_main">Ledger</string>
+    <string name="package_name">in.neel.ledger</string>
+    <string name="custom_url_scheme">in.neel.ledger</string>
+    <string name="widget_name">Ledger</string>
+    <string name="widget_description">Your total money, what you are owed, and quick actions.</string>
+</resources>

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=5"
+    />
+    <meta name="color-scheme" content="light" />
+    <meta name="theme-color" content="#f6f6f8" />
+    <meta name="description" content="A private personal money ledger. Every rupee, accounted for." />
+
+    <!-- Installed on a phone this should look like an app, not a web page. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Ledger" />
+    <meta name="mobile-web-app-capable" content="yes" />
+
+    <!-- A private ledger has no business being indexed or previewed. -->
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+
+    <title>Ledger</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <noscript>
+      <div style="padding: 2rem; font-family: system-ui; text-align: center">
+        <h1 style="font-size: 1.25rem">Ledger needs JavaScript</h1>
+        <p style="color: #6b6b73">Please enable it to view your ledger.</p>
+      </div>
+    </noscript>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,295 @@
+@import 'tailwindcss';
+
+/* ------------------------------------------------------------------ *
+ * Design tokens
+ *
+ * One accent, a small set of surfaces, four radii. Everything in the app
+ * is built from these — there is no ad-hoc colour anywhere.
+ * ------------------------------------------------------------------ */
+
+@theme {
+  /* Surfaces: white through warm white, with two translucent glass layers. */
+  --color-canvas: #f6f6f8;
+  --color-canvas-tint: #eceef6;
+  --color-surface: #ffffff;
+  --color-surface-warm: #fbfbfd;
+  --color-surface-sunken: #f2f2f5;
+
+  /* Borders are almost invisible on purpose. */
+  --color-line: #e8e8ed;
+  --color-line-strong: #dcdce3;
+
+  /* Text */
+  --color-ink: #16161a;
+  --color-ink-soft: #5c5c66;
+  --color-ink-muted: #8e8e98;
+  --color-ink-faint: #b4b4bd;
+
+  /* One accent. Apple system indigo. */
+  --color-accent: #5856d6;
+  --color-accent-soft: #ececfb;
+  --color-accent-ink: #4644b8;
+
+  /* Restrained semantics — used for direction, never for decoration. */
+  --color-positive: #1c8f5f;
+  --color-positive-soft: #e6f4ee;
+  --color-negative: #c0453c;
+  --color-negative-soft: #fbeceb;
+
+  /* Radii */
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --radius-xl: 22px;
+  --radius-2xl: 28px;
+
+  /* Easing. The built-in CSS curves are too weak to feel intentional. */
+  --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out-strong: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+
+  --font-sans:
+    'Inter var', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI Variable Text', 'Segoe UI',
+    system-ui, sans-serif;
+  --font-numeric: 'Inter var', 'Inter', -apple-system, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
+
+  --shadow-card: 0 1px 2px rgb(16 16 26 / 0.04), 0 8px 24px -12px rgb(16 16 26 / 0.08);
+  --shadow-raised: 0 1px 3px rgb(16 16 26 / 0.06), 0 12px 32px -8px rgb(16 16 26 / 0.12);
+  --shadow-sheet: 0 -1px 0 rgb(16 16 26 / 0.04), 0 -24px 64px -16px rgb(16 16 26 / 0.18);
+}
+
+/* ------------------------------------------------------------------ *
+ * Base
+ * ------------------------------------------------------------------ */
+
+@layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html {
+    /* Never let a rubber-band scroll reveal a different colour. */
+    background-color: var(--color-canvas);
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-feature-settings: 'cv05' 1, 'ss03' 1;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overscroll-behavior-y: none;
+  }
+
+  /*
+   * A very soft light source at the top of the canvas. It is what keeps the
+   * glass surfaces from looking grey, and it never moves or animates.
+   */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: -20% -20% auto -20%;
+    height: 70vh;
+    background:
+      radial-gradient(60% 55% at 22% 0%, color-mix(in oklab, var(--color-accent) 12%, transparent), transparent 70%),
+      radial-gradient(50% 50% at 88% 6%, color-mix(in oklab, #7aa2ff 14%, transparent), transparent 72%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  /* Financial figures must never reflow as digits change. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1;
+  }
+
+  input,
+  button,
+  textarea,
+  select {
+    font: inherit;
+    color: inherit;
+  }
+
+  input[type='number']::-webkit-outer-spin-button,
+  input[type='number']::-webkit-inner-spin-button {
+    appearance: none;
+    margin: 0;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Materials
+ *
+ * Glass is reserved for surfaces that float above content: navigation,
+ * sheets, the summary card, the floating action button. Ordinary content
+ * sits on solid white so it stays perfectly readable.
+ * ------------------------------------------------------------------ */
+
+@utility glass {
+  background: color-mix(in srgb, white 72%, transparent);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid color-mix(in srgb, white 70%, transparent);
+}
+
+@utility glass-strong {
+  background: color-mix(in srgb, white 86%, transparent);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  border: 1px solid color-mix(in srgb, white 80%, transparent);
+}
+
+@utility card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-card);
+}
+
+/* Safe areas, so the app sits correctly on a notched phone. */
+@utility pt-safe {
+  padding-top: max(env(safe-area-inset-top), 0.5rem);
+}
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* ------------------------------------------------------------------ *
+ * Motion
+ *
+ * Entrances use ease-out so they feel immediate. Nothing animates from
+ * scale(0) — things that appear have always had a shape.
+ * ------------------------------------------------------------------ */
+
+@utility press {
+  transition: transform 160ms var(--ease-out-strong);
+}
+@utility press-active {
+  transform: scale(0.97);
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes sheet-in {
+  from {
+    transform: translate3d(0, 100%, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes shimmer {
+  to {
+    background-position: 200% 0;
+  }
+}
+
+.animate-rise {
+  animation: rise 360ms var(--ease-out-strong) both;
+}
+
+.animate-fade {
+  animation: fade 200ms var(--ease-out-strong) both;
+}
+
+/*
+ * Staggered entrance for lists. Delays stay short (40ms) — long cascades
+ * make an interface feel slow rather than considered.
+ */
+.stagger > * {
+  animation: rise 340ms var(--ease-out-strong) both;
+}
+.stagger > *:nth-child(1) { animation-delay: 0ms; }
+.stagger > *:nth-child(2) { animation-delay: 40ms; }
+.stagger > *:nth-child(3) { animation-delay: 80ms; }
+.stagger > *:nth-child(4) { animation-delay: 120ms; }
+.stagger > *:nth-child(5) { animation-delay: 160ms; }
+.stagger > *:nth-child(6) { animation-delay: 200ms; }
+.stagger > *:nth-child(n + 7) { animation-delay: 220ms; }
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--color-surface-sunken) 0%,
+    color-mix(in srgb, var(--color-surface-sunken) 55%, white) 50%,
+    var(--color-surface-sunken) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+/*
+ * Reduced motion means fewer and gentler animations, not none. Opacity
+ * still carries meaning; movement is what goes away.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 120ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .animate-rise,
+  .stagger > * {
+    animation: fade 160ms ease both !important;
+  }
+
+  .skeleton {
+    animation: none;
+    background: var(--color-surface-sunken);
+  }
+}
+
+/* Hover effects are gated so a tap on a phone does not trigger them. */
+@media (hover: hover) and (pointer: fine) {
+  .hoverable:hover {
+    background-color: var(--color-surface-warm);
+  }
+}
+
+/* Scrollbars, on the platforms that show them. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--color-ink-faint) 45%, transparent);
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: 99px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}

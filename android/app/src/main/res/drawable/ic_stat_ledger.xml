@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Notification icons are drawn as a silhouette: Android ignores colour and
+  uses only the alpha channel, so this is a solid white rupee mark.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="#FFFFFFFF">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M6,3h12v2h-4.1c0.6,0.5 1,1.2 1.2,2H18v2h-2.9c-0.4,2.3 -2.4,4 -4.8,4H9.4l6.3,6.3L14.3,21L6.5,13.2V11h3.8c1.4,0 2.5,-0.8 2.9,-2H6V7h7.2c-0.4,-1.2 -1.5,-2 -2.9,-2H6V3z" />
+</vector>
