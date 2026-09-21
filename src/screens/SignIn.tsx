@@ -45,7 +45,7 @@ export function SignInScreen() {
     if (result.error) {
       setFormError(
         authErrorMessage(
-          result.error.code,
+          result.error,
           mode === 'signup' ? 'We could not create that account.' : 'We could not sign you in.',
         ),
       );
