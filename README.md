@@ -126,14 +126,18 @@ not invent data to fill the gap.
 ## Commands
 
 ```bash
-npm run dev          # API + web
-npm run dev:db       # throwaway local Postgres
-npm test             # 74 tests, including 12 against a real Postgres
-npm run typecheck    # client and server
+npm run dev            # API + web
+npm run dev:db         # throwaway local Postgres, no install needed
+npm test               # 99 tests, incl. 14 against a real Postgres
+npm run typecheck      # client and server
 npm run lint
 npm run build
-npm run db:generate  # new migration from schema changes
+npm run db:generate    # new migration from schema changes
 npm run db:migrate
+
+npm run android:sync   # build the web app and copy it into the Android project
+npm run android:open   # open in Android Studio
+npm run android:run    # build and install on a plugged-in phone
 ```
 
 ---
@@ -161,8 +165,8 @@ Route handlers only parse, delegate and serialise. Accounting lives in
 
 `npm test` runs without any setup. The integration suite uses PGlite — real
 Postgres in-process — and applies the real migrations, so the constraint
-trigger, atomic rollback, idempotent replay and per-user isolation are all
-genuinely exercised rather than mocked.
+trigger, atomic rollback, idempotent replay, atomic edit-as-replace and
+per-user isolation are all genuinely exercised rather than mocked.
 
 The suite walks a full scenario (opening balances → Dad's money → a pool move →
 an expense → a loan → a partial repayment → a savings transfer) and
@@ -192,8 +196,47 @@ Secrets live only in the environment.
 
 ---
 
+
+---
+
+## Android
+
+A Capacitor shell adds the two things a PWA genuinely cannot do: a **native
+home-screen widget** and a **daily reminder**. See [android/README.md](android/README.md).
+
+The widget does no arithmetic — it renders figures the app already computed,
+passed across as strings of integer paise. So it cannot disagree with the app,
+it holds no session, and before its first sync it shows a dash rather than a
+zero, because a zero would be a lie about your money.
+
+---
+
 ## Deploying
 
-Push to a Vercel project, set the environment variables there, and run
-`npm run db:migrate` against the production database. `vercel.json` routes
-`/api/*` to the serverless Express app and everything else to the SPA.
+### Vercel
+
+1. Push to GitHub, then import the repo at [vercel.com/new](https://vercel.com/new).
+2. Set the environment variables (Project → Settings → Environment Variables):
+
+   | Variable | Value |
+   | --- | --- |
+   | `DATABASE_URL` | your Neon **pooled** connection string |
+   | `BETTER_AUTH_SECRET` | `openssl rand -base64 32` |
+   | `BETTER_AUTH_URL` | `https://your-app.vercel.app` |
+   | `APP_URL` | `https://your-app.vercel.app` |
+
+3. Deploy, then apply the migrations once:
+   ```bash
+   DATABASE_URL="<your neon url>" npm run db:migrate
+   ```
+
+`vercel.json` routes `/api/*` to the serverless Express app and everything else
+to the SPA.
+
+### CI
+
+[.github/workflows/ci.yml](.github/workflows/ci.yml) runs lint, typecheck, the
+full test suite and the build on every push. On `main` it also assembles the
+Android debug APK and uploads it as an artifact, so you can install the widget
+on a phone without opening Android Studio. Set the repository variable
+`CAPACITOR_SERVER_URL` to your deployed URL for that job.
