@@ -5,7 +5,7 @@ import { toNodeHandler } from 'better-auth/node';
 import { getAuth } from './auth';
 import { createApiRouter } from './routes';
 import { errorHandler, authLimiter, toHeaders } from './http/middleware';
-import { env, isProduction, hasDatabase } from './env';
+import { env, isProduction, hasDatabase, isConfigured, missingEnv, invalidEnv } from './env';
 
 export function createApp(): Express {
   const app = express();
@@ -62,7 +62,7 @@ export function createApp(): Express {
 
   /* ------------------------------ authentication --------------------------- */
 
-  if (hasDatabase) {
+  if (hasDatabase && isConfigured) {
     // Better Auth owns its own body parsing, so it is mounted before express.json.
     app.all('/api/auth/sign-in/*', authLimiter);
     app.all('/api/auth/sign-up/*', authLimiter);
@@ -70,11 +70,16 @@ export function createApp(): Express {
     app.all('/api/auth/reset-password', authLimiter);
     app.all('/api/auth/*', toNodeHandler(getAuth()));
   } else {
+    // Say precisely what is missing. A deployment that cannot sign anyone in
+    // should not make you guess which environment variable it wants.
     app.all('/api/auth/*', (_req, res) => {
       res.status(503).json({
         error: {
-          code: 'database_unavailable',
-          message: 'Accounts are unavailable until the ledger database is configured.',
+          code: 'not_configured',
+          message: missingEnv.length
+            ? `This deployment is missing ${missingEnv.join(' and ')}. Set it and redeploy.`
+            : 'Accounts are unavailable until the ledger is configured.',
+          details: { missing: missingEnv, invalid: invalidEnv },
         },
       });
     });

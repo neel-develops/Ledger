@@ -24,9 +24,12 @@ export function ErrorState({
           icon={unavailable ? <DatabaseZap /> : <CloudOff />}
           title={unavailable ? 'Your ledger is not connected' : 'We could not load your ledger'}
           description={
-            unavailable
-              ? 'This deployment has no database configured yet, so there is nothing to show. No data has been lost.'
-              : (message ?? 'Check your connection and try again. Nothing was changed.')
+            // When the server named the problem, show that rather than a
+            // generic line — it usually says exactly which variable is unset.
+            message ??
+            (unavailable
+              ? 'This deployment is not configured yet, so there is nothing to show. No data has been lost.'
+              : 'Check your connection and try again. Nothing was changed.')
           }
           action={
             <Button variant="secondary" onClick={onRetry}>

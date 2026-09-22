@@ -45,13 +45,19 @@ export function authErrorMessage(error: unknown, fallback: string): string {
     return 'That email and password do not match. If you have not made an account yet, use Create account.';
   }
   if (status === 429) return 'Too many attempts. Please wait a few minutes and try again.';
-  if (status === 503) return 'The ledger is not reachable right now. Nothing was changed.';
-  if (status && status >= 500) return 'Something went wrong on our side. Please try again.';
-  if (status === 0 || status === undefined) {
-    const message = extract(error, 'message');
-    // A server sentence is better than our guess, when there is one.
-    if (message && message.length < 120) return capitalise(message);
+
+  // A server sentence beats our guess whenever there is one — a misconfigured
+  // deployment says which variable it is missing, and that is worth showing.
+  const message = extract(error, 'message');
+  const usable = message && message.length < 160 ? capitalise(message) : undefined;
+
+  if (status === 503) {
+    return usable ?? 'The ledger is not reachable right now. Nothing was changed.';
   }
+  if (status && status >= 500) {
+    return usable ?? 'Something went wrong on our side. Please try again.';
+  }
+  if (usable) return usable;
 
   return fallback;
 }

@@ -46,18 +46,26 @@ import { getLedgerHealth } from '../services/health';
 import { getInsights, type InsightRange } from '../services/insights';
 import { exportBackup, toCsv, validateBackup, importBackup } from '../services/backup';
 import { notFound } from '../http/errors';
-import { hasDatabase, hasStorage } from '../env';
+import { hasDatabase, hasStorage, isConfigured, missingEnv, invalidEnv } from '../env';
 
 export function createApiRouter(): Router {
   const api = Router();
 
   /* ------------------------------ status ------------------------------ */
 
+  /**
+   * The first thing to check when a deployment misbehaves.
+   *
+   * It names which required variables are missing or malformed — never their
+   * values. Knowing a server is misconfigured is no advantage to anyone; the
+   * 503s already say as much, and guessing is the expensive part.
+   */
   api.get('/status', (_req, res) => {
-    res.json({
-      ok: true,
-      database: hasDatabase ? 'connected' : 'not_configured',
-      storage: hasStorage ? 'connected' : 'not_configured',
+    res.status(isConfigured ? 200 : 503).json({
+      ok: isConfigured,
+      database: hasDatabase ? 'configured' : 'not_configured',
+      storage: hasStorage ? 'configured' : 'not_configured',
+      ...(isConfigured ? {} : { missing: missingEnv, invalid: invalidEnv }),
       time: new Date().toISOString(),
     });
   });

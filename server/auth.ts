@@ -2,7 +2,7 @@ import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { getDb } from './db/client';
 import { users, sessions, accountsAuth, verifications } from './db/schema';
-import { env, isProduction, hasDatabase } from './env';
+import { env, isProduction, hasDatabase, hasAuthSecret } from './env';
 import { bootstrapUser } from './services/bootstrap';
 
 /**
@@ -86,6 +86,11 @@ let instance: Auth | null = null;
 export function getAuth(): Auth {
   if (!hasDatabase) {
     throw new Error('Authentication requires DATABASE_URL to be configured.');
+  }
+  if (!hasAuthSecret) {
+    // Without a secret, session cookies would be signed with a default — which
+    // is to say, forgeable. Refuse rather than appear to work.
+    throw new Error('Authentication requires BETTER_AUTH_SECRET (32+ characters).');
   }
   if (!instance) instance = buildAuth();
   return instance;

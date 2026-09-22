@@ -1,5 +1,5 @@
 import { createApp } from './app';
-import { env, hasDatabase } from './env';
+import { env, isConfigured, missingEnv } from './env';
 
 const app = createApp();
 
@@ -7,10 +7,10 @@ const app = createApp();
 // data has no business being reachable from the rest of the network.
 app.listen(env.PORT, '127.0.0.1', () => {
   console.info(`[api] listening on http://127.0.0.1:${env.PORT}`);
-  if (!hasDatabase) {
+  if (!isConfigured) {
     console.warn(
-      '[api] DATABASE_URL is not set. The API will answer honestly with 503 and the UI will show its ' +
-        'unavailable state — no placeholder data is served.',
+      `[api] not fully configured (missing: ${missingEnv.join(', ') || 'none'}). ` +
+        'The API answers 503 and the UI shows its unavailable state — no placeholder data is served.',
     );
   }
 });

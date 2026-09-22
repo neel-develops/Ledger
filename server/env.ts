@@ -5,6 +5,12 @@ import { z } from 'zod';
  * Secrets only ever live here, read from the process environment. Nothing in
  * this file may be imported from `src/` — the client bundle must never be able
  * to reach a credential.
+ *
+ * Nothing here throws at import time. An earlier version did, and on a
+ * serverless host that means the function dies before it can say anything:
+ * every route, including the health check, returns an opaque
+ * FUNCTION_INVOCATION_FAILED and you are left guessing. A misconfigured
+ * deployment should be able to tell you exactly what it is missing.
  */
 
 const schema = z.object({
@@ -36,25 +42,56 @@ const schema = z.object({
 
 const parsed = schema.safeParse(process.env);
 
-if (!parsed.success) {
-  const issues = parsed.error.issues.map((i) => `  ${i.path.join('.')}: ${i.message}`).join('\n');
-  throw new Error(`Invalid environment configuration:\n${issues}`);
-}
+/**
+ * Variables that are present but malformed — a DATABASE_URL that is not a URL,
+ * a secret that is too short. Kept separate from "missing" because the fix is
+ * different: you set it, it is just wrong.
+ */
+export const invalidEnv: string[] = parsed.success
+  ? []
+  : parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`);
 
-export const env = parsed.data;
+// Fall back to raw values so the app can still boot far enough to explain itself.
+export const env = parsed.success
+  ? parsed.data
+  : ({
+      ...process.env,
+      NODE_ENV: (process.env.NODE_ENV as 'development' | 'test' | 'production') ?? 'development',
+      PORT: Number(process.env.PORT ?? 3001),
+      APP_URL: process.env.APP_URL ?? 'http://localhost:5173',
+      SUPABASE_STORAGE_BUCKET: process.env.SUPABASE_STORAGE_BUCKET ?? 'ledger-files',
+    } as z.infer<typeof schema>);
 
 export const isProduction = env.NODE_ENV === 'production';
 
 /** True when a real database is wired up. The app degrades honestly when not. */
 export const hasDatabase = Boolean(env.DATABASE_URL);
 
+export const hasAuthSecret = Boolean(env.BETTER_AUTH_SECRET && env.BETTER_AUTH_SECRET.length >= 32);
+
 export const hasStorage = Boolean(env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY);
 
-if (isProduction) {
-  const missing: string[] = [];
-  if (!env.DATABASE_URL) missing.push('DATABASE_URL');
-  if (!env.BETTER_AUTH_SECRET) missing.push('BETTER_AUTH_SECRET');
-  if (missing.length) {
-    throw new Error(`Refusing to start in production without: ${missing.join(', ')}`);
-  }
+/** What a production deployment cannot run without. */
+export const missingEnv: string[] = [
+  ...(hasDatabase ? [] : ['DATABASE_URL']),
+  ...(hasAuthSecret ? [] : ['BETTER_AUTH_SECRET']),
+];
+
+/** In production, refuse to serve money endpoints while misconfigured. */
+export const isConfigured = missingEnv.length === 0 && invalidEnv.length === 0;
+
+if (!isConfigured) {
+  // Goes to the platform log, where whoever deployed it will look first.
+  console.error(
+    '[env] the deployment is not fully configured.' +
+      (missingEnv.length ? ` Missing: ${missingEnv.join(', ')}.` : '') +
+      (invalidEnv.length ? ` Invalid: ${invalidEnv.join('; ')}.` : ''),
+  );
+}
+
+if (isProduction && env.APP_URL === 'http://localhost:5173') {
+  console.warn(
+    '[env] APP_URL is still localhost in production. Writes will be rejected because the request ' +
+      'Origin will not match it. Set APP_URL to your deployed origin.',
+  );
 }

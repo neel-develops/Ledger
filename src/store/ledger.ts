@@ -111,7 +111,8 @@ export const useLedger = create<LedgerState>((set, get) => ({
       }
       set({
         state: 'error',
-        unavailable: apiError?.code === 'database_unavailable',
+        unavailable:
+          apiError?.code === 'database_unavailable' || apiError?.code === 'not_configured',
         error: apiError?.message ?? 'We could not load your ledger.',
       });
     }
