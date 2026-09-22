@@ -42,6 +42,18 @@ jobs:
       - name: Build
         run: npm run build
 
+      # api/index.js is generated but committed, because Vercel discovers
+      # serverless functions at checkout and would never see a build artefact.
+      # Rebuilding it here means it can never silently go stale.
+      - name: API bundle is up to date
+        run: |
+          npm run build:api
+          if ! git diff --quiet -- api/index.js; then
+            echo "::error::api/index.js is stale. Run 'npm run build:api' and commit the result."
+            git diff --stat -- api/index.js
+            exit 1
+          fi
+
   android:
     name: Android build
     runs-on: ubuntu-latest
