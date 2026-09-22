@@ -16,7 +16,8 @@ function buildAuth() {
     secret: env.BETTER_AUTH_SECRET,
     baseURL: env.BETTER_AUTH_URL ?? env.APP_URL,
     basePath: '/api/auth',
-    trustedOrigins: [env.APP_URL],
+    // Same trailing-slash tolerance as the origin guard in app.ts.
+    trustedOrigins: [...new Set([env.APP_URL, env.APP_URL.replace(/\/+$/, '')])],
 
     database: drizzleAdapter(getDb(), {
       provider: 'pg',

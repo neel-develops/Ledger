@@ -529,7 +529,8 @@ function buildAuth() {
     secret: env.BETTER_AUTH_SECRET,
     baseURL: env.BETTER_AUTH_URL ?? env.APP_URL,
     basePath: "/api/auth",
-    trustedOrigins: [env.APP_URL],
+    // Same trailing-slash tolerance as the origin guard in app.ts.
+    trustedOrigins: [.../* @__PURE__ */ new Set([env.APP_URL, env.APP_URL.replace(/\/+$/, "")])],
     database: drizzleAdapter(getDb(), {
       provider: "pg",
       schema: {
@@ -2733,9 +2734,16 @@ function createApp() {
     })
   );
   app2.use(cookieParser());
+  const allowedOrigin = (() => {
+    try {
+      return new URL(env.APP_URL).origin;
+    } catch {
+      return env.APP_URL;
+    }
+  })();
   app2.use((req, res, next) => {
     const origin = req.headers.origin;
-    if (origin && origin !== env.APP_URL && req.method !== "GET" && req.method !== "HEAD") {
+    if (origin && origin !== allowedOrigin && req.method !== "GET" && req.method !== "HEAD") {
       res.status(403).json({
         error: { code: "forbidden_origin", message: "That request did not come from this app." }
       });

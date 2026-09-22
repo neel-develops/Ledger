@@ -47,9 +47,26 @@ export function createApp(): Express {
    * Vercel routes /api in production), so there is no CORS allowance to grant
    * and no cross-site request can carry the session cookie.
    */
+  /*
+   * Compare ORIGINS, not strings.
+   *
+   * An Origin header is always scheme + host with no path and no trailing
+   * slash, while APP_URL is typed by a person into a dashboard — and
+   * "https://example.com/" is the overwhelmingly natural thing to type. That
+   * one character used to reject every write with "That request did not come
+   * from this app", which is a maddening thing to debug.
+   */
+  const allowedOrigin = (() => {
+    try {
+      return new URL(env.APP_URL).origin;
+    } catch {
+      return env.APP_URL;
+    }
+  })();
+
   app.use((req, res, next) => {
     const origin = req.headers.origin;
-    if (origin && origin !== env.APP_URL && req.method !== 'GET' && req.method !== 'HEAD') {
+    if (origin && origin !== allowedOrigin && req.method !== 'GET' && req.method !== 'HEAD') {
       res.status(403).json({
         error: { code: 'forbidden_origin', message: 'That request did not come from this app.' },
       });
