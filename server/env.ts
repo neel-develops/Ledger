@@ -13,31 +13,42 @@ import { z } from 'zod';
  * deployment should be able to tell you exactly what it is missing.
  */
 
+/**
+ * A variable set to an empty string is not set.
+ *
+ * Hosting dashboards hand back "" for a field someone left blank, and a
+ * deployment should not fall over because an OPTIONAL variable is present but
+ * empty — which is exactly what happened: a blank SUPABASE_URL and a blank
+ * PORT were reported as invalid and blocked sign-in entirely.
+ */
+const optional = <T extends z.ZodTypeAny>(inner: T) =>
+  z.preprocess((value) => (value === '' ? undefined : value), inner);
+
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
-  PORT: z.coerce.number().int().positive().default(3001),
+  PORT: optional(z.coerce.number().int().positive().default(3001)),
 
   /** Neon Postgres. The single source of truth for all financial data. */
-  DATABASE_URL: z.string().url().optional(),
+  DATABASE_URL: optional(z.string().url().optional()),
 
   /**
    * Connection pool size. Serverless instances should stay small so they do
    * not exhaust the database's connection limit. Set to 1 against a
    * single-connection development database.
    */
-  DB_POOL_MAX: z.coerce.number().int().min(1).max(50).optional(),
+  DB_POOL_MAX: optional(z.coerce.number().int().min(1).max(50).optional()),
 
   /** Better Auth. Must be a strong random value in production. */
-  BETTER_AUTH_SECRET: z.string().min(32).optional(),
-  BETTER_AUTH_URL: z.string().url().optional(),
+  BETTER_AUTH_SECRET: optional(z.string().min(32).optional()),
+  BETTER_AUTH_URL: optional(z.string().url().optional()),
 
   /** Public origin of the app, used for cookies, CORS and auth callbacks. */
-  APP_URL: z.string().url().default('http://localhost:5173'),
+  APP_URL: optional(z.string().url().default('http://localhost:5173')),
 
   /** Supabase Storage — attachments and encrypted backups only. Never data. */
-  SUPABASE_URL: z.string().url().optional(),
-  SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
-  SUPABASE_STORAGE_BUCKET: z.string().default('ledger-files'),
+  SUPABASE_URL: optional(z.string().url().optional()),
+  SUPABASE_SERVICE_ROLE_KEY: optional(z.string().optional()),
+  SUPABASE_STORAGE_BUCKET: optional(z.string().default('ledger-files')),
 });
 
 const parsed = schema.safeParse(process.env);
@@ -50,6 +61,19 @@ const parsed = schema.safeParse(process.env);
 export const invalidEnv: string[] = parsed.success
   ? []
   : parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`);
+
+/**
+ * Only these can stop the app serving. A malformed SUPABASE_URL is worth
+ * reporting, but refusing to sign anyone in over an unused file-storage
+ * setting would be absurd.
+ */
+const REQUIRED_KEYS = ['DATABASE_URL', 'BETTER_AUTH_SECRET', 'APP_URL'];
+
+const blockingInvalid: string[] = parsed.success
+  ? []
+  : parsed.error.issues
+      .filter((i) => REQUIRED_KEYS.includes(String(i.path[0])))
+      .map((i) => `${i.path.join('.')}: ${i.message}`);
 
 // Fall back to raw values so the app can still boot far enough to explain itself.
 export const env = parsed.success
@@ -78,15 +102,18 @@ export const missingEnv: string[] = [
 ];
 
 /** In production, refuse to serve money endpoints while misconfigured. */
-export const isConfigured = missingEnv.length === 0 && invalidEnv.length === 0;
+export const isConfigured = missingEnv.length === 0 && blockingInvalid.length === 0;
 
 if (!isConfigured) {
   // Goes to the platform log, where whoever deployed it will look first.
   console.error(
     '[env] the deployment is not fully configured.' +
       (missingEnv.length ? ` Missing: ${missingEnv.join(', ')}.` : '') +
-      (invalidEnv.length ? ` Invalid: ${invalidEnv.join('; ')}.` : ''),
+      (blockingInvalid.length ? ` Invalid: ${blockingInvalid.join('; ')}.` : ''),
   );
+} else if (invalidEnv.length) {
+  // Worth knowing about, but not worth refusing to serve over.
+  console.warn(`[env] ignoring malformed optional settings: ${invalidEnv.join('; ')}`);
 }
 
 if (isProduction && env.APP_URL === 'http://localhost:5173') {

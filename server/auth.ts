@@ -59,6 +59,16 @@ function buildAuth() {
         sameSite: 'lax',
         secure: isProduction,
       },
+      /*
+       * Behind a platform proxy the socket address is the proxy, so without
+       * this every visitor shares one rate-limit bucket — which means one
+       * person guessing passwords can lock everyone else out, and the limit
+       * protects nobody. Vercel sets x-forwarded-for and strips any client
+       * copy, so it is safe to trust here.
+       */
+      ipAddress: {
+        ipAddressHeaders: ['x-forwarded-for', 'x-real-ip'],
+      },
     },
 
     databaseHooks: {

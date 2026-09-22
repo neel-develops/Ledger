@@ -392,29 +392,32 @@ var participantsRelations = relations(transactionParticipants, ({ one }) => ({
 // server/env.ts
 import "dotenv/config";
 import { z } from "zod";
+var optional = (inner) => z.preprocess((value) => value === "" ? void 0 : value, inner);
 var schema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
-  PORT: z.coerce.number().int().positive().default(3001),
+  PORT: optional(z.coerce.number().int().positive().default(3001)),
   /** Neon Postgres. The single source of truth for all financial data. */
-  DATABASE_URL: z.string().url().optional(),
+  DATABASE_URL: optional(z.string().url().optional()),
   /**
    * Connection pool size. Serverless instances should stay small so they do
    * not exhaust the database's connection limit. Set to 1 against a
    * single-connection development database.
    */
-  DB_POOL_MAX: z.coerce.number().int().min(1).max(50).optional(),
+  DB_POOL_MAX: optional(z.coerce.number().int().min(1).max(50).optional()),
   /** Better Auth. Must be a strong random value in production. */
-  BETTER_AUTH_SECRET: z.string().min(32).optional(),
-  BETTER_AUTH_URL: z.string().url().optional(),
+  BETTER_AUTH_SECRET: optional(z.string().min(32).optional()),
+  BETTER_AUTH_URL: optional(z.string().url().optional()),
   /** Public origin of the app, used for cookies, CORS and auth callbacks. */
-  APP_URL: z.string().url().default("http://localhost:5173"),
+  APP_URL: optional(z.string().url().default("http://localhost:5173")),
   /** Supabase Storage — attachments and encrypted backups only. Never data. */
-  SUPABASE_URL: z.string().url().optional(),
-  SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
-  SUPABASE_STORAGE_BUCKET: z.string().default("ledger-files")
+  SUPABASE_URL: optional(z.string().url().optional()),
+  SUPABASE_SERVICE_ROLE_KEY: optional(z.string().optional()),
+  SUPABASE_STORAGE_BUCKET: optional(z.string().default("ledger-files"))
 });
 var parsed = schema.safeParse(process.env);
 var invalidEnv = parsed.success ? [] : parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`);
+var REQUIRED_KEYS = ["DATABASE_URL", "BETTER_AUTH_SECRET", "APP_URL"];
+var blockingInvalid = parsed.success ? [] : parsed.error.issues.filter((i) => REQUIRED_KEYS.includes(String(i.path[0]))).map((i) => `${i.path.join(".")}: ${i.message}`);
 var env = parsed.success ? parsed.data : {
   ...process.env,
   NODE_ENV: process.env.NODE_ENV ?? "development",
@@ -430,11 +433,13 @@ var missingEnv = [
   ...hasDatabase ? [] : ["DATABASE_URL"],
   ...hasAuthSecret ? [] : ["BETTER_AUTH_SECRET"]
 ];
-var isConfigured = missingEnv.length === 0 && invalidEnv.length === 0;
+var isConfigured = missingEnv.length === 0 && blockingInvalid.length === 0;
 if (!isConfigured) {
   console.error(
-    "[env] the deployment is not fully configured." + (missingEnv.length ? ` Missing: ${missingEnv.join(", ")}.` : "") + (invalidEnv.length ? ` Invalid: ${invalidEnv.join("; ")}.` : "")
+    "[env] the deployment is not fully configured." + (missingEnv.length ? ` Missing: ${missingEnv.join(", ")}.` : "") + (blockingInvalid.length ? ` Invalid: ${blockingInvalid.join("; ")}.` : "")
   );
+} else if (invalidEnv.length) {
+  console.warn(`[env] ignoring malformed optional settings: ${invalidEnv.join("; ")}`);
 }
 if (isProduction && env.APP_URL === "http://localhost:5173") {
   console.warn(
@@ -562,6 +567,16 @@ function buildAuth() {
         httpOnly: true,
         sameSite: "lax",
         secure: isProduction
+      },
+      /*
+       * Behind a platform proxy the socket address is the proxy, so without
+       * this every visitor shares one rate-limit bucket — which means one
+       * person guessing passwords can lock everyone else out, and the limit
+       * protects nobody. Vercel sets x-forwarded-for and strips any client
+       * copy, so it is safe to trust here.
+       */
+      ipAddress: {
+        ipAddressHeaders: ["x-forwarded-for", "x-real-ip"]
       }
     },
     databaseHooks: {
