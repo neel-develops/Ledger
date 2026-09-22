@@ -9,6 +9,7 @@ import {
   EyeOff,
   HeartPulse,
   LogOut,
+  Palette,
   Scale,
   ShieldCheck,
   Tag,
@@ -29,6 +30,7 @@ import { api, ApiError } from '../lib/api';
 import type { LedgerHealthReport, ImportPreview } from '../lib/types';
 import { CategoriesSheet, CashCheckHistorySheet, PoolsSheet } from './Manage';
 import { ReminderSettingsSheet } from '../components/ReminderSettings';
+import { AppearanceSheet, PrivacySheet } from './Privacy';
 import { isNative, clearWidget } from '../lib/native';
 
 export function MoreScreen() {
@@ -38,12 +40,16 @@ export function MoreScreen() {
   const toggleBalances = usePrefs((s) => s.toggleBalances);
   const reminderEnabled = usePrefs((s) => s.reminderEnabled);
   const reminderTime = usePrefs((s) => s.reminderTime);
+  const theme = usePrefs((s) => s.theme);
+  const dashboard = useLedger((s) => s.dashboard);
   const [health, setHealth] = useState<'closed' | 'open'>('closed');
   const [backup, setBackup] = useState(false);
   const [categories, setCategories] = useState(false);
   const [pools, setPools] = useState(false);
   const [checks, setChecks] = useState(false);
   const [reminder, setReminder] = useState(false);
+  const [appearance, setAppearance] = useState(false);
+  const [privacy, setPrivacy] = useState(false);
 
   return (
     <div>
@@ -101,6 +107,17 @@ export function MoreScreen() {
             chevron
           />
           <Row
+            icon={<IconBadge tone="neutral" size="sm"><EyeOff /></IconBadge>}
+            title="What others see"
+            subtitle={
+              dashboard?.hasPrivate
+                ? 'Some money is hidden from your total'
+                : 'Keep an account out of your total'
+            }
+            onClick={() => setPrivacy(true)}
+            chevron
+          />
+          <Row
             icon={<IconBadge tone="neutral" size="sm">{balancesHidden ? <EyeOff /> : <Eye />}</IconBadge>}
             title="Hide balances"
             subtitle="Blur every figure at a glance"
@@ -111,8 +128,15 @@ export function MoreScreen() {
       </section>
 
       <section className="mb-5">
-        <SectionLabel>Data</SectionLabel>
+        <SectionLabel>App</SectionLabel>
         <List>
+          <Row
+            icon={<IconBadge tone="neutral" size="sm"><Palette /></IconBadge>}
+            title="Appearance"
+            subtitle={theme === 'system' ? 'Follows your phone' : theme === 'dark' ? 'Dark' : 'Light'}
+            onClick={() => setAppearance(true)}
+            chevron
+          />
           <Row
             icon={<IconBadge tone="neutral" size="sm"><BellRing /></IconBadge>}
             title="Daily reminder"
@@ -126,6 +150,12 @@ export function MoreScreen() {
             onClick={() => setReminder(true)}
             chevron
           />
+        </List>
+      </section>
+
+      <section className="mb-5">
+        <SectionLabel>Data</SectionLabel>
+        <List>
           <Row
             icon={<IconBadge tone="neutral" size="sm"><Download /></IconBadge>}
             title="Backup & export"
@@ -169,6 +199,8 @@ export function MoreScreen() {
         Every rupee, accounted for.
       </p>
 
+      <AppearanceSheet open={appearance} onClose={() => setAppearance(false)} />
+      <PrivacySheet open={privacy} onClose={() => setPrivacy(false)} />
       <ReminderSettingsSheet open={reminder} onClose={() => setReminder(false)} />
       <PoolsSheet open={pools} onClose={() => setPools(false)} />
       <CategoriesSheet open={categories} onClose={() => setCategories(false)} />

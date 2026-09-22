@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { TransactionKind } from '@shared/domain';
+import type { ThemePreference } from '../lib/theme';
 
 /**
  * What the app remembers so you barely have to type.
@@ -26,6 +27,10 @@ interface PrefsState extends Recents {
    */
   ownerId: string | null;
   bindUser: (userId: string) => void;
+
+  /** Light, dark, or whatever the phone is doing. */
+  theme: ThemePreference;
+  setTheme: (theme: ThemePreference) => void;
 
   /** Hide balances at a glance, for use in public. */
   balancesHidden: boolean;
@@ -58,6 +63,7 @@ export const usePrefs = create<PrefsState>()(
       peopleIds: [],
       kinds: [],
       ownerId: null,
+      theme: 'system' as ThemePreference,
       balancesHidden: false,
       reminderEnabled: false,
       reminderTime: '21:00',
@@ -75,6 +81,8 @@ export const usePrefs = create<PrefsState>()(
                 kinds: [],
               },
         ),
+
+      setTheme: (theme) => set({ theme }),
 
       toggleBalances: () => set((s) => ({ balancesHidden: !s.balancesHidden })),
 

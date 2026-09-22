@@ -57,6 +57,7 @@ export async function updateAccount(
         ...(input.name !== undefined ? { name: input.name } : {}),
         ...(input.isDefault !== undefined ? { isDefault: input.isDefault } : {}),
         ...(input.archived !== undefined ? { archivedAt: input.archived ? new Date() : null } : {}),
+        ...(input.isPrivate !== undefined ? { isPrivate: input.isPrivate } : {}),
         updatedAt: new Date(),
       })
       .where(and(eq(accounts.id, id), eq(accounts.userId, userId)))

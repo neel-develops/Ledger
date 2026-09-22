@@ -110,6 +110,15 @@ export const accounts = pgTable(
     name: text('name').notNull(),
     kind: accountKindEnum('kind').notNull(),
     isDefault: boolean('is_default').notNull().default(false),
+    /**
+     * Excluded from "Total money" and from the home-screen widget.
+     *
+     * Presentation only. The ledger still counts every paisa of it: the
+     * balance is real, backups include it, reconciliation checks it, and the
+     * health checks verify it. What changes is only what is added up in front
+     * of whoever is looking over your shoulder.
+     */
+    isPrivate: boolean('is_private').notNull().default(false),
     sortOrder: integer('sort_order').notNull().default(0),
     archivedAt: timestamp('archived_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

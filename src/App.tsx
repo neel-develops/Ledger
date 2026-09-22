@@ -4,6 +4,7 @@ import { Toaster, toast } from 'sonner';
 import { useSession } from './lib/auth-client';
 import { useLedger } from './store/ledger';
 import { usePrefs } from './store/prefs';
+import { applyTheme, watchSystemTheme } from './lib/theme';
 import { startOutboxSync } from './lib/outbox';
 import { AppShell } from './components/AppShell';
 import { UpdatePrompt } from './components/UpdatePrompt';
@@ -20,6 +21,15 @@ import { MoreScreen } from './screens/More';
 import { SignInScreen } from './screens/SignIn';
 
 export default function App() {
+  const theme = usePrefs((s) => s.theme);
+
+  useEffect(() => {
+    applyTheme(theme);
+    // Only worth listening to the OS while we are actually following it.
+    if (theme !== 'system') return;
+    return watchSystemTheme(() => applyTheme('system'));
+  }, [theme]);
+
   return (
     <BrowserRouter>
       <Routes>

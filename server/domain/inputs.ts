@@ -128,6 +128,8 @@ export const updateAccountSchema = z.object({
   name: name.optional(),
   isDefault: z.boolean().optional(),
   archived: z.boolean().optional(),
+  /** Keep this account out of "Total money" and the widget. */
+  isPrivate: z.boolean().optional(),
 });
 
 export const createPoolSchema = z.object({

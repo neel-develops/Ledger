@@ -145,6 +145,8 @@ export interface AccountView {
   balance: number;
   archivedAt: string | null;
   isDefault: boolean;
+  /** Kept out of "Total money" and the widget. The ledger still counts it. */
+  isPrivate: boolean;
 }
 
 export interface PoolView {
@@ -174,8 +176,19 @@ export interface CategoryView {
 }
 
 export interface DashboardView {
-  /** Σ asset — every rupee I physically control, mine or not. */
+  /**
+   * Σ asset, EXCLUDING anything marked private.
+   *
+   * This is a presentation figure: it is what the app shows and adds up when
+   * someone might be looking. The ledger itself is unchanged and complete —
+   * see `privateMoney` for the rest, and note that backups, reconciliation
+   * and the health checks always work from the whole thing.
+   */
   ownedMoney: number;
+  /** What is being held back from `ownedMoney`. Zero when nothing is private. */
+  privateMoney: number;
+  /** True when at least one account or pool is currently private. */
+  hasPrivate: boolean;
   /** Σ receivable */
   owedToMe: number;
   /** Positive number: what I owe. */

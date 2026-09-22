@@ -167,6 +167,15 @@ var accounts = pgTable(
     name: text("name").notNull(),
     kind: accountKindEnum("kind").notNull(),
     isDefault: boolean("is_default").notNull().default(false),
+    /**
+     * Excluded from "Total money" and from the home-screen widget.
+     *
+     * Presentation only. The ledger still counts every paisa of it: the
+     * balance is real, backups include it, reconciliation checks it, and the
+     * health checks verify it. What changes is only what is added up in front
+     * of whoever is looking over your shoulder.
+     */
+    isPrivate: boolean("is_private").notNull().default(false),
     sortOrder: integer("sort_order").notNull().default(0),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -1072,7 +1081,9 @@ var createAccountSchema = z2.object({
 var updateAccountSchema = z2.object({
   name: name.optional(),
   isDefault: z2.boolean().optional(),
-  archived: z2.boolean().optional()
+  archived: z2.boolean().optional(),
+  /** Keep this account out of "Total money" and the widget. */
+  isPrivate: z2.boolean().optional()
 });
 var createPoolSchema = z2.object({
   name,
@@ -1607,6 +1618,7 @@ async function getAccountBalances(userId2) {
     name: accounts.name,
     kind: accounts.kind,
     isDefault: accounts.isDefault,
+    isPrivate: accounts.isPrivate,
     archivedAt: accounts.archivedAt,
     sortOrder: accounts.sortOrder,
     balance: sumAmount
@@ -1620,7 +1632,8 @@ async function getAccountBalances(userId2) {
     kind: r.kind,
     balance: toNumber(r.balance),
     archivedAt: r.archivedAt?.toISOString() ?? null,
-    isDefault: r.isDefault
+    isDefault: r.isDefault,
+    isPrivate: r.isPrivate
   }));
 }
 async function getPoolBalances(userId2) {
@@ -1683,24 +1696,73 @@ async function getBucketTotals(userId2) {
   return totals;
 }
 async function getDashboard(userId2) {
-  const [accountViews, poolViews, totals] = await Promise.all([
+  const db = getDb();
+  const [accountViews, totals, visibleRows, privateRow] = await Promise.all([
     getAccountBalances(userId2),
-    getPoolBalances(userId2),
-    getBucketTotals(userId2)
+    getBucketTotals(userId2),
+    // Every visible asset entry, grouped by where it sits and whose it is.
+    db.select({
+      kind: accounts.kind,
+      poolId: ownershipPools.id,
+      poolName: ownershipPools.name,
+      poolKind: ownershipPools.kind,
+      poolIsDefault: ownershipPools.isDefault,
+      poolSort: ownershipPools.sortOrder,
+      total: sumAmount
+    }).from(ledgerEntries).innerJoin(accounts, eq2(accounts.id, ledgerEntries.accountId)).innerJoin(ownershipPools, eq2(ownershipPools.id, ledgerEntries.poolId)).where(
+      and2(
+        eq2(ledgerEntries.userId, userId2),
+        eq2(ledgerEntries.bucket, "asset"),
+        eq2(accounts.isPrivate, false)
+      )
+    ).groupBy(
+      accounts.kind,
+      ownershipPools.id,
+      ownershipPools.name,
+      ownershipPools.kind,
+      ownershipPools.isDefault,
+      ownershipPools.sortOrder
+    ),
+    db.select({ total: sumAmount }).from(ledgerEntries).innerJoin(accounts, eq2(accounts.id, ledgerEntries.accountId)).where(
+      and2(
+        eq2(ledgerEntries.userId, userId2),
+        eq2(ledgerEntries.bucket, "asset"),
+        eq2(accounts.isPrivate, true)
+      )
+    )
   ]);
-  const ownedMoney = totals.asset;
+  const privateMoney = toNumber(privateRow[0]?.total ?? 0);
+  const ownedMoney = normalizeZero(totals.asset - privateMoney);
   const owedToMe = totals.receivable;
   const iOwe = negatePaise(totals.payable);
   const byLocation = { cash: 0, digital: 0, savings: 0, other: 0 };
-  for (const account of accountViews) {
-    if (CASH_ACCOUNT_KINDS.includes(account.kind)) byLocation.cash += account.balance;
-    else if (DIGITAL_ACCOUNT_KINDS.includes(account.kind)) byLocation.digital += account.balance;
-    else if (account.kind === "savings") byLocation.savings += account.balance;
-    else byLocation.other += account.balance;
+  const pools = /* @__PURE__ */ new Map();
+  for (const row of visibleRows) {
+    const amount = toNumber(row.total);
+    if (CASH_ACCOUNT_KINDS.includes(row.kind)) byLocation.cash += amount;
+    else if (DIGITAL_ACCOUNT_KINDS.includes(row.kind)) byLocation.digital += amount;
+    else if (row.kind === "savings") byLocation.savings += amount;
+    else byLocation.other += amount;
+    const pool2 = pools.get(row.poolId);
+    if (pool2) pool2.balance += amount;
+    else
+      pools.set(row.poolId, {
+        id: row.poolId,
+        name: row.poolName,
+        kind: row.poolKind,
+        balance: amount,
+        isDefault: row.poolIsDefault,
+        sortOrder: row.poolSort
+      });
   }
-  const hasAnyData = Object.values(totals).some((v) => v !== 0);
+  for (const pool2 of await getPoolBalances(userId2)) {
+    if (!pools.has(pool2.id)) pools.set(pool2.id, { ...pool2, balance: 0, sortOrder: 0 });
+  }
+  const byPool = [...pools.values()].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)).map(({ sortOrder: _sortOrder, ...pool2 }) => ({ ...pool2, balance: normalizeZero(pool2.balance) }));
   return {
     ownedMoney,
+    privateMoney,
+    hasPrivate: accountViews.some((a) => a.isPrivate),
     owedToMe,
     iOwe,
     netPosition: normalizeZero(ownedMoney + owedToMe - iOwe),
@@ -1710,9 +1772,9 @@ async function getDashboard(userId2) {
       savings: normalizeZero(byLocation.savings),
       other: normalizeZero(byLocation.other)
     },
-    byPool: poolViews,
+    byPool,
     accounts: accountViews,
-    hasAnyData
+    hasAnyData: Object.values(totals).some((v) => v !== 0)
   };
 }
 async function getPositionBalance(userId2, accountId, poolId) {
@@ -1752,6 +1814,7 @@ async function updateAccount(userId2, id, input) {
       ...input.name !== void 0 ? { name: input.name } : {},
       ...input.isDefault !== void 0 ? { isDefault: input.isDefault } : {},
       ...input.archived !== void 0 ? { archivedAt: input.archived ? /* @__PURE__ */ new Date() : null } : {},
+      ...input.isPrivate !== void 0 ? { isPrivate: input.isPrivate } : {},
       updatedAt: /* @__PURE__ */ new Date()
     }).where(and3(eq3(accounts.id, id), eq3(accounts.userId, userId2))).returning();
     return row;

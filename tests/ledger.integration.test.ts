@@ -9,10 +9,15 @@ import {
   reverseTransaction,
   replaceTransaction,
 } from '../server/services/transactions';
-import { getDashboard, getPeopleBalances, getPositionBalance } from '../server/services/balances';
+import {
+  getDashboard,
+  getPeopleBalances,
+  getPositionBalance,
+  getBucketTotals,
+} from '../server/services/balances';
 import { getLedgerHealth } from '../server/services/health';
 import { reconcile } from '../server/services/reconciliation';
-import { createPerson } from '../server/services/reference';
+import { createPerson, updateAccount } from '../server/services/reference';
 import { exportBackup } from '../server/services/backup';
 
 /**
@@ -498,6 +503,54 @@ describe('ledger integration', () => {
     expect((await getDashboard(USER_ID)).ownedMoney).toBe(before.ownedMoney);
     const [row] = await getDb().select().from(transactions).where(eq(transactions.id, transaction.id));
     expect(row!.reversedByTransactionId).toBeNull();
+  });
+
+  it('hides a private account from the dashboard without touching the ledger', async () => {
+    const before = await getDashboard(USER_ID);
+    const savingsBalance = await getPositionBalance(USER_ID, savings);
+    expect(savingsBalance).toBeGreaterThan(0);
+
+    await updateAccount(USER_ID, savings, { isPrivate: true });
+
+    const hidden = await getDashboard(USER_ID);
+
+    // The total no longer includes it, and says how much is being held back.
+    expect(hidden.ownedMoney).toBe(before.ownedMoney - savingsBalance);
+    expect(hidden.privateMoney).toBe(savingsBalance);
+    expect(hidden.hasPrivate).toBe(true);
+
+    // The tiles agree with the total — no figure contradicts another.
+    expect(hidden.byLocation.savings).toBe(0);
+    const tiles =
+      hidden.byLocation.cash + hidden.byLocation.digital + hidden.byLocation.savings + hidden.byLocation.other;
+    expect(tiles).toBe(hidden.ownedMoney);
+
+    // ...and so do the per-pool balances.
+    const pooled = hidden.byPool.reduce((sum, p) => sum + p.balance, 0);
+    expect(pooled).toBe(hidden.ownedMoney);
+
+    // The LEDGER is untouched: the balance is real and still reachable.
+    expect(await getPositionBalance(USER_ID, savings)).toBe(savingsBalance);
+    const totals = await getBucketTotals(USER_ID);
+    expect(totals.asset).toBe(before.ownedMoney);
+
+    // Health checks still see everything, and still pass.
+    const health = await getLedgerHealth(USER_ID);
+    expect(health.healthy).toBe(true);
+
+    // A backup keeps every rupee, private or not.
+    const backup = await exportBackup(USER_ID);
+    const backedUp = backup.entries
+      .filter((e) => e.bucket === 'asset' && e.accountId === savings)
+      .reduce((sum, e) => sum + e.amount, 0);
+    expect(backedUp).toBe(savingsBalance);
+
+    // Unhiding restores it exactly.
+    await updateAccount(USER_ID, savings, { isPrivate: false });
+    const shown = await getDashboard(USER_ID);
+    expect(shown.ownedMoney).toBe(before.ownedMoney);
+    expect(shown.privateMoney).toBe(0);
+    expect(shown.hasPrivate).toBe(false);
   });
 
   it('passes every ledger health check after all of the above', async () => {

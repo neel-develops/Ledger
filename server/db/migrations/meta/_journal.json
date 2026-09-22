@@ -15,6 +15,13 @@
       "when": 1790010772143,
       "tag": "0001_ledger_balance_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790080823860,
+      "tag": "0002_account_privacy",
+      "breakpoints": true
     }
   ]
 }

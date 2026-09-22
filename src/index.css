@@ -58,6 +58,74 @@
   --shadow-sheet: 0 -1px 0 rgb(16 16 26 / 0.04), 0 -24px 64px -16px rgb(16 16 26 / 0.18);
 }
 
+/*
+ * Glass, as tokens rather than hard-coded whites.
+ *
+ * Every translucent surface reads from these four values, so the dark theme
+ * only has to redefine them once instead of every component learning about
+ * two colour schemes.
+ */
+:root {
+  --glass-bg: color-mix(in srgb, white 72%, transparent);
+  --glass-bg-strong: color-mix(in srgb, white 86%, transparent);
+  --glass-border: color-mix(in srgb, white 70%, transparent);
+  --glass-border-strong: color-mix(in srgb, white 80%, transparent);
+  --glass-blur: 20px;
+
+  /* The soft light source behind everything. */
+  --glow-a: color-mix(in oklab, var(--color-accent) 12%, transparent);
+  --glow-b: color-mix(in oklab, #7aa2ff 14%, transparent);
+
+  color-scheme: light;
+}
+
+/*
+ * Dark theme.
+ *
+ * Not an inversion: near-black surfaces lift slightly as they come forward,
+ * the accent is lightened so it stays legible on dark, and glass becomes a
+ * dark frost rather than a white one. Financial red and green are brightened
+ * just enough to keep their meaning without glowing.
+ */
+:root[data-theme='dark'] {
+  --color-canvas: #0b0c10;
+  --color-canvas-tint: #12131a;
+  --color-surface: #16171e;
+  --color-surface-warm: #1a1b23;
+  --color-surface-sunken: #202129;
+
+  --color-line: #262832;
+  --color-line-strong: #343642;
+
+  --color-ink: #f3f3f6;
+  --color-ink-soft: #a9a9b6;
+  --color-ink-muted: #7d7d8b;
+  --color-ink-faint: #55555f;
+
+  --color-accent: #8583f0;
+  --color-accent-soft: #23233a;
+  --color-accent-ink: #a5a3ff;
+
+  --color-positive: #45c48d;
+  --color-positive-soft: #132c23;
+  --color-negative: #ef6f63;
+  --color-negative-soft: #331d1b;
+
+  --glass-bg: color-mix(in srgb, #20212b 62%, transparent);
+  --glass-bg-strong: color-mix(in srgb, #1c1d26 82%, transparent);
+  --glass-border: color-mix(in srgb, white 9%, transparent);
+  --glass-border-strong: color-mix(in srgb, white 13%, transparent);
+
+  --glow-a: color-mix(in oklab, var(--color-accent) 18%, transparent);
+  --glow-b: color-mix(in oklab, #4c6bd8 16%, transparent);
+
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px -12px rgb(0 0 0 / 0.6);
+  --shadow-raised: 0 1px 3px rgb(0 0 0 / 0.5), 0 12px 32px -8px rgb(0 0 0 / 0.7);
+  --shadow-sheet: 0 -1px 0 rgb(255 255 255 / 0.05), 0 -24px 64px -16px rgb(0 0 0 / 0.8);
+
+  color-scheme: dark;
+}
+
 /* ------------------------------------------------------------------ *
  * Base
  * ------------------------------------------------------------------ */
@@ -94,8 +162,8 @@
     inset: -20% -20% auto -20%;
     height: 70vh;
     background:
-      radial-gradient(60% 55% at 22% 0%, color-mix(in oklab, var(--color-accent) 12%, transparent), transparent 70%),
-      radial-gradient(50% 50% at 88% 6%, color-mix(in oklab, #7aa2ff 14%, transparent), transparent 72%);
+      radial-gradient(60% 55% at 22% 0%, var(--glow-a), transparent 70%),
+      radial-gradient(50% 50% at 88% 6%, var(--glow-b), transparent 72%);
     pointer-events: none;
     z-index: 0;
   }
@@ -136,17 +204,31 @@
  * ------------------------------------------------------------------ */
 
 @utility glass {
-  background: color-mix(in srgb, white 72%, transparent);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid color-mix(in srgb, white 70%, transparent);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  border: 1px solid var(--glass-border);
 }
 
 @utility glass-strong {
-  background: color-mix(in srgb, white 86%, transparent);
-  backdrop-filter: blur(28px) saturate(180%);
-  -webkit-backdrop-filter: blur(28px) saturate(180%);
-  border: 1px solid color-mix(in srgb, white 80%, transparent);
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(calc(var(--glass-blur) * 1.4)) saturate(180%);
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 1.4)) saturate(180%);
+  border: 1px solid var(--glass-border-strong);
+}
+
+/*
+ * A card that floats rather than sits. Used for the summary surfaces that
+ * benefit from depth — never for dense content, which stays on solid
+ * surfaces so it remains perfectly readable.
+ */
+@utility card-glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(170%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(170%);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-card);
 }
 
 @utility card {
@@ -251,6 +333,13 @@
  * Reduced motion means fewer and gentler animations, not none. Opacity
  * still carries meaning; movement is what goes away.
  */
+/* Switching theme repaints everything; a transition on that looks like a fault. */
+:root[data-theme-changing] *,
+:root[data-theme-changing] *::before,
+:root[data-theme-changing] *::after {
+  transition: none !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

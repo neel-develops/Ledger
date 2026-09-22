@@ -69,12 +69,27 @@ export function HomeScreen() {
           )}
         </div>
 
-        <p className="mt-1.5 text-[13px] text-ink-muted">
+        <p className="mt-1.5 flex items-center gap-1.5 text-[13px] text-ink-muted">
           {loading
-            ? ' '
-            : dashboard?.hasAnyData
-              ? 'Cash, bank and savings combined'
-              : 'No money recorded yet'}
+            ? '\u00a0'
+            : !dashboard?.hasAnyData
+              ? 'No money recorded yet'
+              : dashboard.hasPrivate
+                ? // Not "savings combined" when savings is exactly what is being
+                  // left out; the caption has to stay true to the number above it.
+                  'Everything you are showing'
+                : 'Cash, bank and savings combined'}
+          {/*
+            An account is being held back. Deliberately just a small icon: it
+            means something to you and nothing to whoever is glancing at your
+            phone, which is the entire point of the feature.
+          */}
+          {!loading && dashboard?.hasPrivate && (
+            <EyeOff
+              className="size-3.5 shrink-0 text-ink-faint"
+              aria-label="Some accounts are hidden from this total"
+            />
+          )}
         </p>
 
         {dashboard && dashboard.hasAnyData && (
