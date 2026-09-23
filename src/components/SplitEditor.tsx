@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { CalendarDays, X } from 'lucide-react';
+import { DatePicker } from './ui/DatePicker';
+import { X } from 'lucide-react';
 import { formatPaise } from '@shared/money';
 import { TextInput } from './ui/primitives';
 import { filterPeople } from '../lib/people';
@@ -164,43 +165,5 @@ export function SplitEditor({
  * Future dates are refused — you cannot have spent money you have not spent.
  */
 export function DateField({ value, onChange }: { value: Date; onChange: (value: Date) => void }) {
-  const isoDay = (d: Date) => {
-    const local = new Date(d.getTime() - d.getTimezoneOffset() * 60_000);
-    return local.toISOString().slice(0, 10);
-  };
-
-  const today = new Date();
-  const isToday = isoDay(value) === isoDay(today);
-
-  return (
-    <label className="flex items-center gap-2 rounded-md border border-line bg-surface px-3 py-2">
-      <CalendarDays className="size-4 shrink-0 text-ink-faint" aria-hidden />
-      <span className="shrink-0 text-[13px] text-ink-muted">When</span>
-      <input
-        type="date"
-        value={isoDay(value)}
-        max={isoDay(today)}
-        onChange={(e) => {
-          if (!e.target.value) return;
-          const [y, m, d] = e.target.value.split('-').map(Number);
-          if (!y || !m || !d) return;
-          // Keep the time of day so same-day ordering stays sensible.
-          const next = new Date(value);
-          next.setFullYear(y, m - 1, d);
-          onChange(next > today ? today : next);
-        }}
-        className="min-w-0 flex-1 bg-transparent text-right text-[14px] font-medium text-ink focus:outline-none"
-        aria-label="Date of the transaction"
-      />
-      {!isToday && (
-        <button
-          type="button"
-          onClick={() => onChange(new Date())}
-          className="shrink-0 text-[13px] font-medium text-accent press active:scale-[0.97]"
-        >
-          Today
-        </button>
-      )}
-    </label>
-  );
+  return <DatePicker value={value} onChange={onChange} />;
 }

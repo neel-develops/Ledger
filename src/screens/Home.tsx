@@ -94,7 +94,7 @@ export function HomeScreen() {
         </p>
 
         {dashboard && dashboard.hasAnyData && (
-          <div className="mt-4 flex items-center justify-between border-t border-[color-mix(in_srgb,white_60%,transparent)] pt-3.5">
+          <div className="mt-4 flex items-center justify-between border-t border-[var(--tile-border)] pt-3.5">
             <div>
               <p className="text-[12px] text-ink-muted">Net position</p>
               <Money paise={dashboard.netPosition} size="lg" maskable className="mt-0.5" />

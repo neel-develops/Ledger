@@ -46,6 +46,23 @@ import { useSavingsAlarm } from '../lib/useSavingsAlarm';
 
 type Step = 'pick' | 'entry';
 
+/**
+ * A hue per action, so the list reads as a spectrum rather than eight grey
+ * cards. In dark mode each tile glows in its own colour.
+ */
+const ACTION_HUES: Record<string, string> = {
+  expense: '#ff5d73',
+  income: '#34d399',
+  transfer: '#5b8cff',
+  savings: '#b06bff',
+  lend: '#ffb547',
+  borrow: '#ff7ad9',
+  settle_receivable: '#2fd3e0',
+  settle_payable: '#a3a8ff',
+  paid_for_someone: '#ff8c42',
+  someone_paid_for_me: '#7ee07e',
+};
+
 /** The seven things the quick-action sheet offers, in designed order. */
 const QUICK_ACTIONS: { id: string; kind: TransactionKind; savings?: boolean }[] = [
   { id: 'expense', kind: 'expense' },
@@ -201,27 +218,33 @@ function KindPicker({
   return (
     <div className="pb-4">
       <div className="stagger space-y-2">
-        {actions.map((action) => {
+        {actions.map((action, index) => {
           const meta = action.savings ? SAVINGS_ACTION : KIND_META[action.kind];
           return (
             <button
               key={action.id}
               type="button"
               onClick={() => onPick(action.kind, action.savings)}
-              className={cn(
-                'flex w-full items-center gap-3.5 rounded-xl px-4 py-3.5 text-left',
-                'border border-[color-mix(in_srgb,white_60%,transparent)]',
-                'bg-[color-mix(in_srgb,white_74%,transparent)]',
-                'transition-[transform,background-color] duration-[140ms] ease-out-strong',
-                'active:scale-[0.985] active:bg-[color-mix(in_srgb,white_92%,transparent)]',
-              )}
+              style={
+                {
+                  '--tone': ACTION_HUES[action.id] ?? 'var(--color-accent)',
+                  '--shine-delay': `${180 + index * 70}ms`,
+                } as React.CSSProperties
+              }
+              className="kind-tile group flex w-full items-center gap-3.5 rounded-xl px-4 py-3.5 text-left"
             >
-              <IconBadge tone={meta.tone}>{meta.icon}</IconBadge>
-              <span className="min-w-0 flex-1">
-                <span className="block text-[16px] font-medium text-ink">{meta.label}</span>
+              <span aria-hidden className="kind-glow" />
+              <span className="kind-icon grid size-10 shrink-0 place-items-center rounded-[14px] [&>svg]:size-[19px]">
+                {meta.icon}
+              </span>
+              <span className="relative min-w-0 flex-1">
+                <span className="block text-[16px] font-semibold tracking-[-0.01em] text-ink">{meta.label}</span>
                 <span className="block text-[13px] text-ink-muted">{meta.description}</span>
               </span>
-              <ChevronRight className="size-4 text-ink-faint" aria-hidden />
+              <ChevronRight
+                className="kind-chevron relative size-4 text-ink-faint transition-transform duration-200 ease-out-strong group-active:translate-x-1"
+                aria-hidden
+              />
             </button>
           );
         })}

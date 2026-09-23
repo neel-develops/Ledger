@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, ChevronDown } from 'lucide-react';
 import { cn } from '../../lib/cn';
+import { useAnchoredPopover } from '../../lib/useAnchoredPopover';
 
 /**
  * A select that looks like the rest of the app.
@@ -34,15 +35,12 @@ export interface PickerProps {
 }
 
 const MENU_MAX_HEIGHT = 300;
-const GAP = 6;
-const EDGE = 12;
 /** An option with a hint line is about this tall. Only used to choose a side. */
 const ROW_ESTIMATE = 64;
 
 export function Picker({ label, value, options, onChange, placeholder = 'Chooseâ€¦', className }: PickerProps) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
-  const [place, setPlace] = useState<{ left: number; width: number; maxHeight: number; top?: number; bottom?: number } | null>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
   const listId = useId();
@@ -66,50 +64,19 @@ export function Picker({ label, value, options, onChange, placeholder = 'Chooseâ
     close();
   };
 
-  // Place the menu against the field, flipping above when there is no room below.
-  useLayoutEffect(() => {
-    if (!open) return;
-    const measure = () => {
-      const box = trigger.current?.getBoundingClientRect();
-      if (!box) return;
-      const width = Math.max(box.width, 200);
-      const left = Math.min(Math.max(8, box.left), window.innerWidth - width - 8);
-      // Room on each side, keeping clear of the screen edge.
-      const below = window.innerHeight - box.bottom - GAP - EDGE;
-      const above = box.top - GAP - EDGE;
-      const wanted = Math.min(MENU_MAX_HEIGHT, options.length * ROW_ESTIMATE + 12);
-      // Below when it fits; otherwise whichever side has more room. Either
-      // way the menu is capped to that room and scrolls, so it never runs
-      // off the screen.
-      setPlace(
-        below >= wanted || below >= above
-          ? { left, width, top: box.bottom + GAP, maxHeight: Math.min(MENU_MAX_HEIGHT, below) }
-          : { left, width, bottom: window.innerHeight - box.top + GAP, maxHeight: Math.min(MENU_MAX_HEIGHT, above) },
-      );
-    };
-    measure();
-    window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
-  }, [open, options.length]);
+  const dismiss = useCallback(() => close(false), [close]);
+  const place = useAnchoredPopover({
+    open,
+    trigger,
+    panel: menu,
+    onDismiss: dismiss,
+    wantedHeight: options.length * ROW_ESTIMATE + 12,
+    maxHeight: MENU_MAX_HEIGHT,
+  });
 
-  // Outside taps and scrolling the page close it; the menu itself can scroll.
   useEffect(() => {
-    if (!open) return;
-    menu.current?.focus({ preventScroll: true });
-    const onDown = (event: PointerEvent) => {
-      const target = event.target as Node;
-      if (!menu.current?.contains(target) && !trigger.current?.contains(target)) close(false);
-    };
-    const onScroll = (event: Event) => {
-      if (!menu.current?.contains(event.target as Node)) close(false);
-    };
-    document.addEventListener('pointerdown', onDown, true);
-    document.addEventListener('scroll', onScroll, true);
-    return () => {
-      document.removeEventListener('pointerdown', onDown, true);
-      document.removeEventListener('scroll', onScroll, true);
-    };
-  }, [open, close]);
+    if (open && place) menu.current?.focus({ preventScroll: true });
+  }, [open, place]);
 
   // Keep the highlighted option in view while arrowing through a long list.
   useEffect(() => {
@@ -191,11 +158,11 @@ export function Picker({ label, value, options, onChange, placeholder = 'Chooseâ
               top: place.top,
               bottom: place.bottom,
               maxHeight: place.maxHeight,
-              transformOrigin: place.top !== undefined ? 'top center' : 'bottom center',
+              transformOrigin: `${place.origin} center`,
             }}
             className={cn(
               'picker-in fixed z-[60] overflow-y-auto overscroll-contain rounded-[18px] p-1.5 outline-none',
-              'border border-line bg-[var(--sheet-bg)] shadow-[0_18px_48px_-12px_rgb(0_0_0/0.45)]',
+              'border border-line bg-[var(--popover-bg)] shadow-[0_18px_48px_-12px_rgb(0_0_0/0.45)]',
             )}
           >
             {options.map((option, index) => {

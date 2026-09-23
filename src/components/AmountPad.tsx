@@ -75,8 +75,8 @@ export function AmountPad({ value, onChange, children, autoFocusKeyboard = true 
             aria-label={key === 'del' ? 'Delete last digit' : key}
             className={cn(
               'grid h-[58px] place-items-center rounded-lg text-[22px] font-medium',
-              'bg-[color-mix(in_srgb,white_70%,transparent)] text-ink',
-              'border border-[color-mix(in_srgb,white_60%,transparent)]',
+              'bg-[var(--tile-bg)] text-ink',
+              'border border-[var(--tile-border)]',
               'transition-[transform,background-color] duration-[120ms] ease-out-strong',
               'active:scale-[0.96] active:bg-surface-sunken',
               key === 'del' && 'text-ink-soft',

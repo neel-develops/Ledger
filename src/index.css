@@ -77,6 +77,11 @@
    * translucent sheet let the screen behind show straight through the fields.
    */
   --sheet-bg: color-mix(in srgb, white 97%, transparent);
+  /* Menus and calendars float over busy content, so they are fully solid. */
+  --popover-bg: #ffffff;
+  /* Tappable tiles that sit on a sheet: the keypad, the action list. */
+  --tile-bg: color-mix(in srgb, white 80%, transparent);
+  --tile-border: color-mix(in srgb, #10101a 7%, transparent);
 
   /* The soft light source behind everything. */
   --glow-a: color-mix(in oklab, var(--color-accent) 12%, transparent);
@@ -122,6 +127,9 @@
   --glass-border: color-mix(in srgb, white 9%, transparent);
   --glass-border-strong: color-mix(in srgb, white 13%, transparent);
   --sheet-bg: color-mix(in srgb, #17181f 97%, transparent);
+  --popover-bg: #1b1c24;
+  --tile-bg: #1d1e27;
+  --tile-border: color-mix(in srgb, white 7%, transparent);
 
   --glow-a: color-mix(in oklab, var(--color-accent) 18%, transparent);
   --glow-b: color-mix(in oklab, #4c6bd8 16%, transparent);
@@ -461,6 +469,90 @@
 }
 .picker-in {
   animation: picker-in 160ms var(--ease-out-strong) both;
+}
+
+/*
+ * The "What happened?" tiles. Each carries its own hue in --tone.
+ * Light: a soft tile with a tinted icon. Dark: the tile glows in its colour —
+ * a tinted wash from the left, a neon halo behind the icon, a coloured edge —
+ * and a streak of light runs across each one as the list arrives.
+ */
+.kind-tile {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background: var(--tile-bg);
+  border: 1px solid var(--tile-border);
+  transition:
+    transform 140ms var(--ease-out-strong),
+    border-color 200ms ease-out,
+    box-shadow 200ms ease-out;
+}
+.kind-tile:active {
+  transform: scale(0.985);
+}
+.kind-tile .kind-icon {
+  position: relative;
+  color: var(--tone);
+  background: color-mix(in oklab, var(--tone) 15%, transparent);
+}
+.kind-tile .kind-glow {
+  position: absolute;
+  z-index: -1;
+  left: -40px;
+  top: 50%;
+  width: 150px;
+  height: 150px;
+  translate: 0 -50%;
+  border-radius: 9999px;
+  background: radial-gradient(closest-side, color-mix(in oklab, var(--tone) 30%, transparent), transparent);
+  opacity: 0.35;
+  pointer-events: none;
+}
+.kind-tile::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 35%, color-mix(in srgb, white 14%, transparent) 50%, transparent 65%);
+  transform: translateX(-110%);
+  animation: kind-shine 900ms var(--ease-out-strong) var(--shine-delay, 200ms) 1 both;
+  pointer-events: none;
+}
+@keyframes kind-shine {
+  to { transform: translateX(110%); }
+}
+
+:root[data-theme='dark'] .kind-tile {
+  background: linear-gradient(100deg, color-mix(in oklab, var(--tone) 16%, #16171e) 0%, #17181f 58%);
+  border-color: color-mix(in oklab, var(--tone) 26%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.05),
+    0 12px 30px -20px color-mix(in oklab, var(--tone) 80%, transparent);
+}
+:root[data-theme='dark'] .kind-tile:active {
+  border-color: color-mix(in oklab, var(--tone) 55%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.06),
+    0 0 0 1px color-mix(in oklab, var(--tone) 35%, transparent),
+    0 14px 34px -14px color-mix(in oklab, var(--tone) 90%, transparent);
+}
+:root[data-theme='dark'] .kind-tile .kind-glow {
+  opacity: 1;
+  animation: kind-glow 3.2s ease-in-out infinite;
+}
+:root[data-theme='dark'] .kind-tile .kind-icon {
+  background: color-mix(in oklab, var(--tone) 22%, #111218);
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--tone) 45%, transparent),
+    0 0 20px -2px color-mix(in oklab, var(--tone) 70%, transparent);
+}
+:root[data-theme='dark'] .kind-tile::after {
+  background: linear-gradient(105deg, transparent 35%, color-mix(in oklab, var(--tone) 35%, transparent) 50%, transparent 65%);
+}
+@keyframes kind-glow {
+  0%, 100% { opacity: 0.75; scale: 1; }
+  50% { opacity: 1; scale: 1.12; }
 }
 
 /* The small Chillar that peeks up on the form while savings is the source. */
