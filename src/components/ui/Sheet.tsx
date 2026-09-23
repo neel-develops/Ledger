@@ -136,7 +136,7 @@ export function Sheet({ open, onClose, title, action, children, fullHeight, clas
         style={{ transitionDuration: entered ? `${ENTER_MS}ms` : `${EXIT_MS}ms` }}
         className={cn(
           'absolute inset-x-0 bottom-0 mx-auto w-full max-w-[560px]',
-          'rounded-t-[28px] glass-strong shadow-sheet',
+          'rounded-t-[28px] sheet-surface shadow-sheet',
           'flex flex-col',
           fullHeight ? 'h-[92svh]' : 'max-h-[88svh]',
           'transition-transform ease-drawer will-change-transform',

@@ -71,6 +71,12 @@
   --glass-border: color-mix(in srgb, white 70%, transparent);
   --glass-border-strong: color-mix(in srgb, white 80%, transparent);
   --glass-blur: 20px;
+  /*
+   * Sheets and menus. Frosted, but only just: a form has to be read, and
+   * where backdrop-filter is slow or missing (some Android WebViews) a
+   * translucent sheet let the screen behind show straight through the fields.
+   */
+  --sheet-bg: color-mix(in srgb, white 97%, transparent);
 
   /* The soft light source behind everything. */
   --glow-a: color-mix(in oklab, var(--color-accent) 12%, transparent);
@@ -115,6 +121,7 @@
   --glass-bg-strong: color-mix(in srgb, #1c1d26 82%, transparent);
   --glass-border: color-mix(in srgb, white 9%, transparent);
   --glass-border-strong: color-mix(in srgb, white 13%, transparent);
+  --sheet-bg: color-mix(in srgb, #17181f 97%, transparent);
 
   --glow-a: color-mix(in oklab, var(--color-accent) 18%, transparent);
   --glow-b: color-mix(in oklab, #4c6bd8 16%, transparent);
@@ -208,6 +215,13 @@
   backdrop-filter: blur(var(--glass-blur)) saturate(180%);
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
   border: 1px solid var(--glass-border);
+}
+
+@utility sheet-surface {
+  background: var(--sheet-bg);
+  backdrop-filter: blur(calc(var(--glass-blur) * 1.4)) saturate(180%);
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 1.4)) saturate(180%);
+  border: 1px solid var(--glass-border-strong);
 }
 
 @utility glass-strong {
@@ -440,6 +454,15 @@
 .alarm-pop {
   animation: alarm-pop 420ms var(--ease-out-strong) both;
 }
+/* The picker menu grows out of its field. */
+@keyframes picker-in {
+  0% { transform: scale(0.96); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.picker-in {
+  animation: picker-in 160ms var(--ease-out-strong) both;
+}
+
 /* The small Chillar that peeks up on the form while savings is the source. */
 @keyframes peek-in {
   0% { transform: translate3d(0, 14px, 0) scale(0.9); opacity: 0; }

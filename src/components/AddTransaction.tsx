@@ -1,10 +1,24 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronRight, Sparkles, X } from 'lucide-react';
+import {
+  Banknote,
+  ChevronRight,
+  CircleDollarSign,
+  HandCoins,
+  Landmark,
+  PiggyBank,
+  Smartphone,
+  Sparkles,
+  UserRound,
+  Wallet,
+  X,
+} from 'lucide-react';
+import type { AccountView, PoolView } from '@shared/domain';
 import { toast } from 'sonner';
 import { formatPaise } from '@shared/money';
 import { parseTransaction, NLP_EXAMPLES, type TransactionDraft } from '@shared/nlp';
 import type { TransactionKind } from '@shared/domain';
 import { Sheet } from './ui/Sheet';
+import { Picker, type PickerOption } from './ui/Picker';
 import { Button } from './ui/Button';
 import { AmountPad } from './AmountPad';
 import { Avatar, IconBadge, TextInput, Segmented } from './ui/primitives';
@@ -15,7 +29,7 @@ import { useLedger, useDefaults } from '../store/ledger';
 import { usePrefs } from '../store/prefs';
 import { ApiError } from '../lib/api';
 import type { CreateTransactionPayload } from '../lib/types';
-import { firstExisting, isSelectable } from '../lib/refs';
+import { firstExisting } from '../lib/refs';
 import { orderPeople, filterPeople, findByExactName } from '../lib/people';
 import { cn } from '../lib/cn';
 import { SavingsPeek } from './SavingsGuard';
@@ -527,7 +541,7 @@ function EntryForm({
         </div>
       )}
 
-      <div className="sticky bottom-0 -mx-5 mt-4 bg-gradient-to-t from-white via-white/95 to-transparent px-5 pt-4 pb-2">
+      <div className="sticky bottom-0 -mx-5 mt-4 bg-gradient-to-t from-[var(--sheet-bg)] via-[var(--sheet-bg)] to-transparent px-5 pt-4 pb-2">
         <Button block size="lg" onClick={save} loading={saving} disabled={!canSave}>
           {problems[0] ?? `Save ${formatPaise(form.amount)}`}
         </Button>
@@ -788,8 +802,8 @@ function ContextRow({
   kind: TransactionKind;
   savingsMode: boolean;
   form: FormState;
-  accounts: { id: string; name: string; kind: string }[];
-  pools: { id: string; name: string }[];
+  accounts: AccountView[];
+  pools: PoolView[];
   onPatch: (changes: Partial<FormState>) => void;
 }) {
   const incoming = (
@@ -797,36 +811,39 @@ function ContextRow({
   ).includes(kind);
   const sourceKey = incoming ? 'toAccountId' : 'accountId';
   const poolKey = incoming ? 'toPoolId' : 'poolId';
+  const hidden = usePrefs((p) => p.balancesHidden);
+  const accountList = accountOptions(accounts, hidden);
+  const poolList = poolOptions(pools, hidden);
 
   return (
     <div className="space-y-1.5 pt-1">
       <div className="flex gap-2">
-        <Select
+        <Picker
           label={incoming ? 'Into' : 'From'}
           value={form[sourceKey]}
-          options={accounts.map((a) => ({ id: a.id, label: a.name }))}
+          options={accountList}
           onChange={(id) => onPatch({ [sourceKey]: id } as Partial<FormState>)}
         />
-        <Select
+        <Picker
           label="Whose"
           value={form[poolKey]}
-          options={pools.map((p) => ({ id: p.id, label: p.name }))}
+          options={poolList}
           onChange={(id) => onPatch({ [poolKey]: id } as Partial<FormState>)}
         />
       </div>
 
       {kind === 'transfer' && !savingsMode && (
         <div className="flex gap-2">
-          <Select
+          <Picker
             label="To"
             value={form.toAccountId}
-            options={accounts.map((a) => ({ id: a.id, label: a.name }))}
+            options={accountList}
             onChange={(toAccountId) => onPatch({ toAccountId })}
           />
-          <Select
+          <Picker
             label="Whose"
             value={form.toPoolId}
-            options={pools.map((p) => ({ id: p.id, label: p.name }))}
+            options={poolList}
             onChange={(toPoolId) => onPatch({ toPoolId })}
           />
         </div>
@@ -835,36 +852,37 @@ function ContextRow({
   );
 }
 
-function Select({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: string | null;
-  options: { id: string; label: string }[];
-  onChange: (id: string) => void;
-}) {
-  return (
-    <label className="flex flex-1 items-center gap-2 rounded-md border border-line bg-surface px-3 py-2">
-      <span className="shrink-0 text-[13px] text-ink-muted">{label}</span>
-      <select
-        // A <select> whose value matches no option silently renders the first
-        // one. For an account picker that means showing "Cash" while holding
-        // something else entirely, so an unmatched value is forced back to the
-        // placeholder and the user is asked.
-        value={isSelectable(options, value) ? (value as string) : ''}
-        onChange={(e) => onChange(e.target.value)}
-        className="min-w-0 flex-1 bg-transparent text-right text-[14px] font-medium text-ink focus:outline-none"
-      >
-        {!isSelectable(options, value) && <option value="">Choose…</option>}
-        {options.map((option) => (
-          <option key={option.id} value={option.id}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
+const ACCOUNT_ICONS: Record<string, React.ReactNode> = {
+  cash: <Banknote />,
+  bank: <Landmark />,
+  upi: <Smartphone />,
+  wallet: <Wallet />,
+  savings: <PiggyBank />,
+  other: <CircleDollarSign />,
+};
+
+const POOL_ICONS: Record<string, React.ReactNode> = {
+  personal: <UserRound />,
+  dad: <HandCoins />,
+  borrowed: <HandCoins />,
+  other: <CircleDollarSign />,
+};
+
+/** Accounts as picker options, with their balance unless it is meant to stay out of sight. */
+function accountOptions(accounts: AccountView[], hidden: boolean): PickerOption[] {
+  return accounts.map((a) => ({
+    id: a.id,
+    label: a.name,
+    icon: ACCOUNT_ICONS[a.kind] ?? ACCOUNT_ICONS.other,
+    hint: hidden || a.isPrivate ? 'Hidden' : formatPaise(a.balance),
+  }));
+}
+
+function poolOptions(pools: PoolView[], hidden: boolean): PickerOption[] {
+  return pools.map((p) => ({
+    id: p.id,
+    label: p.name,
+    icon: POOL_ICONS[p.kind] ?? POOL_ICONS.other,
+    hint: hidden ? 'Hidden' : formatPaise(p.balance),
+  }));
 }
