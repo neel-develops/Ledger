@@ -406,6 +406,49 @@
 .mascot-happy .mascot-body {
   animation: mascot-bounce 620ms var(--ease-out-strong) 1;
 }
+/* Angry: a furious little shake, with steam puffing out of both sides. */
+@keyframes mascot-shake {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+  15% { transform: translate3d(-3px, 0, 0) rotate(-4deg); }
+  30% { transform: translate3d(3px, 0, 0) rotate(4deg); }
+  45% { transform: translate3d(-2px, 0, 0) rotate(-3deg); }
+  60% { transform: translate3d(2px, 0, 0) rotate(2deg); }
+  75% { transform: translate3d(0, 0, 0) rotate(0deg); }
+}
+@keyframes mascot-steam {
+  0% { transform: translate3d(0, 6px, 0) scale(0.6); opacity: 0; }
+  30% { opacity: 1; }
+  100% { transform: translate3d(0, -10px, 0) scale(1.15); opacity: 0; }
+}
+.mascot-angry .mascot-body {
+  transform-origin: 50% 60%;
+  animation: mascot-shake 900ms ease-in-out infinite;
+}
+.mascot-steam g {
+  transform-box: fill-box;
+  transform-origin: center bottom;
+  animation: mascot-steam 1.3s ease-out infinite;
+}
+.mascot-steam .mascot-steam-right { animation-delay: 650ms; }
+
+/* The savings alarm: slams in, overshooting, like it means it. */
+@keyframes alarm-pop {
+  0% { transform: scale(0.6) translate3d(0, 24px, 0); opacity: 0; }
+  60% { transform: scale(1.04) translate3d(0, -4px, 0); opacity: 1; }
+  100% { transform: scale(1) translate3d(0, 0, 0); opacity: 1; }
+}
+.alarm-pop {
+  animation: alarm-pop 420ms var(--ease-out-strong) both;
+}
+/* The small Chillar that peeks up on the form while savings is the source. */
+@keyframes peek-in {
+  0% { transform: translate3d(0, 14px, 0) scale(0.9); opacity: 0; }
+  100% { transform: translate3d(0, 0, 0) scale(1); opacity: 1; }
+}
+.peek-in {
+  animation: peek-in 320ms var(--ease-out-strong) both;
+}
+
 .mascot-dots circle {
   animation: mascot-dot 1.1s ease-in-out infinite;
 }

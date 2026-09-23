@@ -14,6 +14,8 @@ import { findByExactName } from '../lib/people';
 import { useLedger } from '../store/ledger';
 import type { CreateTransactionPayload } from '../lib/types';
 import { cn } from '../lib/cn';
+import { savingsWithdrawal } from '../lib/savings';
+import { useSavingsAlarm } from '../lib/useSavingsAlarm';
 
 /**
  * Chillar — talk to your ledger.
@@ -73,6 +75,7 @@ export function AssistantSheet({ open, onClose }: { open: boolean; onClose: () =
   const accounts = useLedger((s) => s.accounts) ?? [];
   const addPerson = useLedger((s) => s.addPerson);
   const addTransaction = useLedger((s) => s.addTransaction);
+  const { ask: askAboutSavings, alarm } = useSavingsAlarm();
 
   // Keep the newest message in view.
   useEffect(() => {
@@ -165,6 +168,11 @@ export function AssistantSheet({ open, onClose }: { open: boolean; onClose: () =
 
   async function confirm(itemId: string, draft: DraftState): Promise<boolean> {
     if (draft.status === 'saving' || draft.status === 'saved') return draft.status === 'saved';
+
+    // A drafted withdrawal from savings gets the same furious Chillar as the form.
+    const fromSavings = savingsWithdrawal(draft.payload, accounts);
+    if (fromSavings && !(await askAboutSavings(fromSavings, draft.amount))) return false;
+
     updateDraft(itemId, draft.id, { status: 'saving', error: undefined });
 
     try {
@@ -405,6 +413,8 @@ export function AssistantSheet({ open, onClose }: { open: boolean; onClose: () =
           }}
         />
       </div>
+
+      {alarm}
     </Sheet>
   );
 }

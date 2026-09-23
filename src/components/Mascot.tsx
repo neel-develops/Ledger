@@ -13,7 +13,7 @@ import { cn } from '../lib/cn';
  * prefers-reduced-motion (the global rule in index.css handles that).
  */
 
-export type MascotMood = 'idle' | 'thinking' | 'happy' | 'sad';
+export type MascotMood = 'idle' | 'thinking' | 'happy' | 'sad' | 'angry';
 
 export interface MascotProps {
   size?: number;
@@ -58,8 +58,11 @@ export function Mascot({ size = 96, mood = 'idle', trackPointer = false, classNa
     };
   }, [trackPointer, mood]);
 
-  // Thinking looks up and away, the way people do when working something out.
-  const pupil = mood === 'thinking' ? { x: 2.4, y: -2.6 } : look;
+  // Thinking looks up and away, the way people do when working something out;
+  // angry glares straight at you.
+  const pupil = mood === 'thinking' ? { x: 2.4, y: -2.6 } : mood === 'angry' ? { x: 0, y: 1.2 } : look;
+  // Angry turns the coin red-hot. Everything else stays in the brand's indigo.
+  const hot = mood === 'angry';
 
   return (
     <svg
@@ -74,13 +77,13 @@ export function Mascot({ size = 96, mood = 'idle', trackPointer = false, classNa
     >
       <defs>
         <linearGradient id={`${id}-face`} x1="0" y1="0" x2="0.9" y2="1">
-          <stop offset="0" stopColor="#a3a1ff" />
-          <stop offset="0.55" stopColor="#6f6cf0" />
-          <stop offset="1" stopColor="#4d4acb" />
+          <stop offset="0" stopColor={hot ? '#ffab8f' : '#a3a1ff'} />
+          <stop offset="0.55" stopColor={hot ? '#f5533d' : '#6f6cf0'} />
+          <stop offset="1" stopColor={hot ? '#c42a1d' : '#4d4acb'} />
         </linearGradient>
         <linearGradient id={`${id}-rim`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#3f3cb0" />
-          <stop offset="1" stopColor="#2b2987" />
+          <stop offset="0" stopColor={hot ? '#a11f15' : '#3f3cb0'} />
+          <stop offset="1" stopColor={hot ? '#73130c' : '#2b2987'} />
         </linearGradient>
         <radialGradient id={`${id}-gloss`} cx="0.32" cy="0.26" r="0.55">
           <stop offset="0" stopColor="#ffffff" stopOpacity="0.75" />
@@ -100,7 +103,7 @@ export function Mascot({ size = 96, mood = 'idle', trackPointer = false, classNa
       <g className="mascot-body">
         {/* Antenna, topped with a little gold coin. */}
         <g className="mascot-antenna">
-          <path d="M60 22 C60 16 62 12 65 9" stroke="#4d4acb" strokeWidth="3" strokeLinecap="round" fill="none" />
+          <path d="M60 22 C60 16 62 12 65 9" stroke={hot ? '#a11f15' : '#4d4acb'} strokeWidth="3" strokeLinecap="round" fill="none" />
           <g className="mascot-coin">
             <circle cx="66" cy="8" r="6" fill={`url(#${id}-antenna)`} />
             <text x="66" y="10.8" textAnchor="middle" fontSize="8.5" fontWeight="700" fill="#a8740c">
@@ -115,13 +118,33 @@ export function Mascot({ size = 96, mood = 'idle', trackPointer = false, classNa
         <ellipse cx="60" cy="62" rx="37.5" ry="35" fill="none" stroke="#ffffff" strokeOpacity="0.18" strokeWidth="1.5" />
         <ellipse cx="60" cy="62" rx="44" ry="41" fill={`url(#${id}-gloss)`} />
 
-        {/* Cheeks */}
-        <ellipse cx="34" cy="74" rx="6.5" ry="4" fill="#ff8fb3" opacity={mood === 'sad' ? 0.18 : 0.42} />
-        <ellipse cx="86" cy="74" rx="6.5" ry="4" fill="#ff8fb3" opacity={mood === 'sad' ? 0.18 : 0.42} />
+        {/* Cheeks — none when furious; the whole face is already flushed. */}
+        {!hot && (
+          <>
+            <ellipse cx="34" cy="74" rx="6.5" ry="4" fill="#ff8fb3" opacity={mood === 'sad' ? 0.18 : 0.42} />
+            <ellipse cx="86" cy="74" rx="6.5" ry="4" fill="#ff8fb3" opacity={mood === 'sad' ? 0.18 : 0.42} />
+          </>
+        )}
 
         <Eyes mood={mood} pupil={pupil} />
         <Mouth mood={mood} />
       </g>
+
+      {hot && (
+        // Steam out of both sides, puffing upward in turn.
+        <g className="mascot-steam" fill="#b4b4c6">
+          <g className="mascot-steam-left">
+            <circle cx="12" cy="44" r="5" opacity="0.9" />
+            <circle cx="7" cy="35" r="3.8" opacity="0.7" />
+            <circle cx="10" cy="27" r="2.6" opacity="0.5" />
+          </g>
+          <g className="mascot-steam-right">
+            <circle cx="108" cy="44" r="5" opacity="0.9" />
+            <circle cx="113" cy="35" r="3.8" opacity="0.7" />
+            <circle cx="110" cy="27" r="2.6" opacity="0.5" />
+          </g>
+        </g>
+      )}
 
       {mood === 'thinking' && (
         <g className="mascot-dots" fill="#8583f0">
@@ -141,6 +164,28 @@ function Eyes({ mood, pupil }: { mood: MascotMood; pupil: { x: number; y: number
       <g stroke="#1f1d5c" strokeWidth="4" strokeLinecap="round" fill="none">
         <path d="M38 58 Q45 49 52 58" />
         <path d="M68 58 Q75 49 82 58" />
+      </g>
+    );
+  }
+
+  if (mood === 'angry') {
+    // Brows slammed down toward the nose, eyes narrowed under them.
+    return (
+      <g>
+        {[45, 75].map((cx) => (
+          <g key={cx}>
+            <ellipse cx={cx} cy="59" rx="8.5" ry="8" fill="#ffffff" />
+            <circle cx={cx + (cx < 60 ? 1.5 : -1.5) + pupil.x} cy={60 + pupil.y} r="4.8" fill="#3a0d08" />
+            <circle cx={cx + (cx < 60 ? 3 : 0) + pupil.x} cy={58 + pupil.y} r="1.5" fill="#ffffff" />
+          </g>
+        ))}
+        {/* Heavy lids cut the tops off the eyes, then the brows on top. */}
+        <path d="M35 51 L55 57 L55 49 L35 45 Z" fill="#e0412d" />
+        <path d="M85 51 L65 57 L65 49 L85 45 Z" fill="#e0412d" />
+        <g stroke="#3a0d08" strokeWidth="5.5" strokeLinecap="round">
+          <path d="M33 47 L56 55" />
+          <path d="M87 47 L64 55" />
+        </g>
       </g>
     );
   }
@@ -187,6 +232,14 @@ function Mouth({ mood }: { mood: MascotMood }) {
       );
     case 'thinking':
       return <ellipse cx="62" cy="80" rx="3.6" ry="3" fill="#1f1d5c" />;
+    case 'angry':
+      // Gritted teeth.
+      return (
+        <g>
+          <rect x="44" y="76" width="32" height="13" rx="5" fill="#ffffff" stroke="#3a0d08" strokeWidth="3" />
+          <path d="M44 82.5 H76 M52 76 V89 M60 76 V89 M68 76 V89" stroke="#3a0d08" strokeWidth="1.8" />
+        </g>
+      );
     case 'sad':
       return <path d="M50 84 Q60 76 70 84" stroke="#1f1d5c" strokeWidth="3.4" strokeLinecap="round" fill="none" />;
     default:

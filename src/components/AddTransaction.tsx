@@ -18,6 +18,9 @@ import type { CreateTransactionPayload } from '../lib/types';
 import { firstExisting, isSelectable } from '../lib/refs';
 import { orderPeople, filterPeople, findByExactName } from '../lib/people';
 import { cn } from '../lib/cn';
+import { SavingsPeek } from './SavingsGuard';
+import { savingsWithdrawal } from '../lib/savings';
+import { useSavingsAlarm } from '../lib/useSavingsAlarm';
 
 /**
  * The add-transaction flow.
@@ -369,8 +372,18 @@ function EntryForm({
 
   const canSave = problems.length === 0 && !saving;
 
+  // Is this taking money out of savings? Read off the payload itself, so every
+  // kind that spends from an account (expense, transfer, lend, repay, split)
+  // is covered by the same rule.
+  const withdrawingFrom = savingsWithdrawal(
+    buildPayload({ kind, savingsMode, form, personId: form.personId, myShare, participants, defaults }),
+    accounts,
+  );
+  const { ask, alarm } = useSavingsAlarm();
+
   async function save() {
     if (!canSave) return;
+    if (withdrawingFrom && !(await ask(withdrawingFrom, form.amount))) return;
     setSaving(true);
     setError(null);
 
@@ -483,6 +496,8 @@ function EntryForm({
             />
           )}
 
+          {withdrawingFrom && <SavingsPeek key={withdrawingFrom.id} account={withdrawingFrom} />}
+
           <TextInput
             value={form.note}
             onChange={(e) => patch({ note: e.target.value })}
@@ -517,6 +532,8 @@ function EntryForm({
           {problems[0] ?? `Save ${formatPaise(form.amount)}`}
         </Button>
       </div>
+
+      {alarm}
     </div>
   );
 }
