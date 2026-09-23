@@ -4,6 +4,7 @@ import { enqueue, flushOutbox } from '../lib/outbox';
 import { syncWidget } from '../lib/native';
 import type { CreateTransactionPayload } from '../lib/types';
 import { usePrefs } from './prefs';
+import { sceneFor, useCelebration } from '../lib/celebrate';
 import type {
   DashboardView,
   AccountView,
@@ -56,6 +57,18 @@ interface LedgerState {
 export interface AddResult {
   status: 'saved' | 'queued';
   transaction: TransactionView | null;
+}
+
+/**
+ * Chillar's moment for a transaction that just landed. Fired for queued saves
+ * too: the money moved in the user's world whether or not the server knows yet.
+ */
+function celebrate(payload: CreateTransactionPayload, accounts: LedgerState['accounts']): void {
+  if (!usePrefs.getState().celebrations) return;
+  const p = payload as { kind: CreateTransactionPayload['kind']; amount?: unknown; toAccountId?: unknown };
+  const intoSavings = (accounts ?? []).some((a) => a.id === p.toAccountId && a.kind === 'savings');
+  const scene = sceneFor(p.kind, intoSavings);
+  if (scene) useCelebration.getState().fire({ ...scene, amount: typeof p.amount === 'number' ? p.amount : 0 });
 }
 
 /** Read without subscribing: this runs inside an action, not a render. */
@@ -135,6 +148,7 @@ export const useLedger = create<LedgerState>((set, get) => ({
     try {
       const result = await api.post<{ transaction: TransactionView }>('/transactions', withKey);
       set({ version: get().version + 1 });
+      celebrate(withKey, get().accounts);
       await get().refresh();
       return { status: 'saved', transaction: result.transaction };
     } catch (error) {
@@ -142,6 +156,7 @@ export const useLedger = create<LedgerState>((set, get) => ({
         await enqueue(withKey);
         const outbox = await flushOutbox().catch(() => null);
         set({ pendingCount: outbox?.remaining ?? get().pendingCount + 1, version: get().version + 1 });
+        celebrate(withKey, get().accounts);
         return { status: 'queued', transaction: null };
       }
       throw error;

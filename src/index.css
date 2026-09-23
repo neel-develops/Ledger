@@ -555,6 +555,271 @@
   50% { opacity: 1; scale: 1.12; }
 }
 
+/* ------------------------------------------------------------------ *
+ * The home screen's total card.
+ * Light: calm glass with a faint aurora. Dark: a rainbow border that slowly
+ * turns, an aurora drifting inside, and a few ₹ floating up through it.
+ * ------------------------------------------------------------------ */
+
+@property --hero-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.hero-card {
+  isolation: isolate;
+}
+.hero-card > :not(.hero-fx) {
+  position: relative;
+}
+.hero-fx {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+.hero-aurora {
+  position: absolute;
+  width: 70%;
+  aspect-ratio: 1;
+  border-radius: 9999px;
+  filter: blur(34px);
+  opacity: 0.18;
+}
+.hero-aurora-a {
+  left: -18%;
+  top: -40%;
+  background: #8a6bff;
+  animation: hero-drift-a 11s ease-in-out infinite alternate;
+}
+.hero-aurora-b {
+  right: -22%;
+  bottom: -55%;
+  background: #ff6fb1;
+  animation: hero-drift-b 13s ease-in-out infinite alternate;
+}
+@keyframes hero-drift-a {
+  to { transform: translate3d(38%, 22%, 0) scale(1.15); }
+}
+@keyframes hero-drift-b {
+  to { transform: translate3d(-34%, -18%, 0) scale(1.2); }
+}
+
+.hero-coin {
+  position: absolute;
+  bottom: -18px;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 800;
+  color: #9a6206;
+  background: radial-gradient(circle at 35% 30%, #fff1b8, #f7c443 55%, #cf8e12);
+  opacity: 0;
+  animation: hero-float 9s linear infinite;
+}
+.hero-coin-0 { left: 58%; animation-delay: 0s; }
+.hero-coin-1 { left: 74%; animation-delay: 2.3s; scale: 0.8; }
+.hero-coin-2 { left: 86%; animation-delay: 4.6s; scale: 1.15; }
+.hero-coin-3 { left: 66%; animation-delay: 6.9s; scale: 0.7; }
+@keyframes hero-float {
+  0% { transform: translate3d(0, 0, 0) rotate(0deg); opacity: 0; }
+  12% { opacity: 0.35; }
+  80% { opacity: 0.25; }
+  100% { transform: translate3d(-14px, -190px, 0) rotate(200deg); opacity: 0; }
+}
+
+:root[data-theme='dark'] .hero-card {
+  border-color: transparent;
+  box-shadow: 0 24px 60px -30px rgb(138 107 255 / 0.55);
+}
+/* The border: a conic rainbow, masked down to a 1.5px ring, turning slowly. */
+:root[data-theme='dark'] .hero-card::before,
+:root[data-theme='dark'] .hero-card::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: conic-gradient(
+    from var(--hero-angle),
+    #6a4dff,
+    #d54bff,
+    #ff7a59,
+    #ffb547,
+    #34d399,
+    #2fd3e0,
+    #5b8cff,
+    #6a4dff
+  );
+  animation: hero-spin 7s linear infinite;
+  pointer-events: none;
+}
+:root[data-theme='dark'] .hero-card::before {
+  z-index: 1;
+  padding: 1.5px;
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
+}
+/* …and the same rainbow, blurred, glowing out from behind the card. */
+:root[data-theme='dark'] .hero-card::after {
+  z-index: -1;
+  filter: blur(22px);
+  opacity: 0.32;
+}
+@keyframes hero-spin {
+  to { --hero-angle: 360deg; }
+}
+:root[data-theme='dark'] .hero-aurora {
+  opacity: 0.4;
+}
+:root[data-theme='dark'] .hero-amount {
+  text-shadow:
+    0 0 28px rgb(165 163 255 / 0.45),
+    0 0 2px rgb(255 255 255 / 0.2);
+}
+
+/* ------------------------------------------------------------------ *
+ * Celebrations — Chillar's reaction to a saved transaction.
+ * Each particle carries its own timing in custom properties.
+ * ------------------------------------------------------------------ */
+
+.cel-layer {
+  animation: cel-exit 420ms ease-in 2150ms both;
+}
+@keyframes cel-exit {
+  to { opacity: 0; }
+}
+.cel-flash {
+  animation: cel-flash 1400ms ease-out both;
+}
+@keyframes cel-flash {
+  0% { opacity: 0; }
+  15% { opacity: 1; }
+  100% { opacity: 0.35; }
+}
+.cel-headline {
+  animation: cel-headline 520ms var(--ease-out-strong) 240ms both;
+}
+@keyframes cel-headline {
+  0% { transform: translate3d(0, 18px, 0) scale(0.8); opacity: 0; }
+  60% { transform: translate3d(0, -3px, 0) scale(1.05); opacity: 1; }
+  100% { transform: none; opacity: 1; }
+}
+
+/* Coins pouring down. */
+.cel-fall {
+  animation: cel-fall var(--dur) cubic-bezier(0.45, 0, 0.9, 0.6) var(--delay) both;
+}
+@keyframes cel-fall {
+  from { transform: translate3d(0, -12vh, 0) rotate(0deg); }
+  to { transform: translate3d(var(--drift), 112vh, 0) rotate(var(--rot)); }
+}
+
+/* Coins streaming off after a departing Chillar. */
+.cel-away {
+  animation: cel-away var(--dur) cubic-bezier(0.5, 0, 0.75, 0.3) var(--delay) both;
+}
+@keyframes cel-away {
+  0% { transform: translate3d(0, 0, 0) scale(0.5); opacity: 0; }
+  12% { opacity: 1; }
+  100% { transform: translate3d(var(--dx), var(--dy), 0) rotate(var(--rot)) scale(1); opacity: 0; }
+}
+
+/* A thrown coin: across at a steady pace, up and then down. */
+.cel-arc-x {
+  animation: cel-arc-x var(--dur) linear var(--delay) both;
+}
+@keyframes cel-arc-x {
+  from { transform: translateX(0); }
+  to { transform: translateX(var(--dx)); }
+}
+.cel-arc-y {
+  animation: cel-arc-y var(--dur) linear var(--delay) both;
+}
+@keyframes cel-arc-y {
+  0% { transform: translateY(0) rotate(0deg); opacity: 0; animation-timing-function: cubic-bezier(0.2, 0.7, 0.4, 1); }
+  8% { opacity: 1; }
+  50% { transform: translateY(calc(var(--peak) * -1)) rotate(180deg); animation-timing-function: cubic-bezier(0.6, 0, 0.8, 0.3); }
+  100% { transform: translateY(var(--land)) rotate(360deg); opacity: 1; }
+}
+.cel-arc-fade {
+  animation-name: cel-arc-y, cel-arc-fade;
+  animation-duration: var(--dur), var(--dur);
+  animation-timing-function: linear, linear;
+  animation-delay: var(--delay), var(--delay);
+  animation-fill-mode: both, both;
+}
+@keyframes cel-arc-fade {
+  0%, 85% { scale: 1; }
+  100% { scale: 0.3; opacity: 0; }
+}
+
+/* Confetti: bursts out, then tumbles down. */
+.cel-burst {
+  animation: cel-burst var(--dur) cubic-bezier(0.2, 0.6, 0.4, 1) var(--delay) both;
+}
+@keyframes cel-burst {
+  0% { transform: translate3d(0, 0, 0) rotate(0deg) scale(0.3); opacity: 1; }
+  30% { transform: translate3d(var(--dx), var(--dy), 0) rotate(calc(var(--rot) * 0.35)) scale(1); }
+  100% { transform: translate3d(calc(var(--dx) * 1.25), calc(var(--dy) + 55vh), 0) rotate(var(--rot)); opacity: 0; }
+}
+
+/* How Chillar arrives or leaves. */
+.cel-drop {
+  animation: cel-drop 900ms var(--ease-out-strong) both;
+}
+@keyframes cel-drop {
+  0% { transform: translate3d(0, -70vh, 0) scale(0.9); }
+  50% { transform: translate3d(0, 0, 0) scale(1.1, 0.88); }
+  66% { transform: translate3d(0, -22px, 0) scale(0.96, 1.05); }
+  82% { transform: translate3d(0, 0, 0) scale(1.03, 0.97); }
+  100% { transform: none; }
+}
+.cel-flyaway {
+  animation: cel-flyaway 1500ms cubic-bezier(0.55, 0, 0.8, 0.4) 350ms both;
+}
+@keyframes cel-flyaway {
+  0% { transform: none; }
+  22% { transform: translate3d(-12px, 16px, 0) rotate(-8deg) scale(1.06, 0.94); }
+  100% { transform: translate3d(70vw, -95vh, 0) rotate(32deg) scale(0.45); }
+}
+.cel-jump {
+  animation: cel-jump 700ms var(--ease-out-strong) 3 both;
+}
+@keyframes cel-jump {
+  0%, 100% { transform: none; }
+  40% { transform: translate3d(0, -34px, 0) rotate(-6deg) scale(1.05); }
+  70% { transform: translate3d(0, 0, 0) scale(1.08, 0.92); }
+}
+.cel-pop {
+  animation: alarm-pop 480ms var(--ease-out-strong) both;
+}
+
+/* The piggy bank or wallet the coins land in: gulps each one. */
+.cel-target {
+  animation:
+    alarm-pop 420ms var(--ease-out-strong) both,
+    cel-gulp 300ms ease-out 1000ms 4;
+}
+@keyframes cel-gulp {
+  0%, 100% { transform: scale(1) rotate(0deg); }
+  40% { transform: scale(1.14) rotate(-8deg); }
+}
+.cel-sweat {
+  animation: cel-sweat 900ms ease-in 700ms infinite;
+}
+@keyframes cel-sweat {
+  0% { transform: translate3d(0, 0, 0); opacity: 0; }
+  20% { opacity: 1; }
+  100% { transform: translate3d(3px, 26px, 0); opacity: 0; }
+}
+
 /* The small Chillar that peeks up on the form while savings is the source. */
 @keyframes peek-in {
   0% { transform: translate3d(0, 14px, 0) scale(0.9); opacity: 0; }

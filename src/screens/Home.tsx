@@ -9,16 +9,17 @@ import {
   UserRoundMinus,
   Wallet,
   ChartPie,
+  ChevronRight,
 } from 'lucide-react';
 import { useLedger } from '../store/ledger';
 import { usePrefs } from '../store/prefs';
 import { useSession } from '../lib/auth-client';
 import { Money } from '../components/ui/Money';
-import { Card, EmptyState, IconBadge, List, Row, SectionLabel, Skeleton } from '../components/ui/primitives';
+import { Card, EmptyState, List, SectionLabel, Skeleton } from '../components/ui/primitives';
 import { TransactionRow } from '../components/TransactionRow';
 import { ErrorState } from '../components/ErrorState';
-import { cn } from '../lib/cn';
-import { Mascot } from '../components/Mascot';
+import { Mascot, type MascotMood } from '../components/Mascot';
+import { useCountUp } from '../lib/useCountUp';
 
 export function HomeScreen() {
   const navigate = useNavigate();
@@ -26,6 +27,11 @@ export function HomeScreen() {
   const { data: session } = useSession();
   const hidden = usePrefs((s) => s.balancesHidden);
   const toggleBalances = usePrefs((s) => s.toggleBalances);
+
+  // The headline figures count to their new value, so a new entry is felt.
+  // (Hooks, so above the early return.)
+  const owned = useCountUp(dashboard?.ownedMoney);
+  const net = useCountUp(dashboard?.netPosition);
 
   if (state === 'error') {
     return <ErrorState message={error} unavailable={unavailable} onRetry={() => void load()} />;
@@ -36,20 +42,40 @@ export function HomeScreen() {
   const loading = dashboard === null;
   const firstName = session?.user?.name?.split(' ')[0];
 
+  // Chillar in the corner reads the room.
+  const mood: MascotMood = !dashboard?.hasAnyData
+    ? 'idle'
+    : dashboard.netPosition > 0
+      ? 'happy'
+      : dashboard.netPosition < 0
+        ? 'sad'
+        : 'idle';
+
   return (
     <div className="space-y-5">
-      <header className="flex items-center justify-between px-1 pt-4 pb-1">
+      <header className="flex items-end justify-between px-1 pt-4 pb-1">
         <div>
-          <p className="text-[14px] text-ink-muted">{greeting()}</p>
-          <p className="text-[22px] font-semibold tracking-[-0.025em] text-ink">
-            {firstName ?? 'Welcome'}
+          <p className="text-[14px] text-ink-muted">
+            {greeting()} <span className="text-ink-faint">· {today()}</span>
           </p>
+          <p className="text-[24px] font-bold tracking-[-0.03em] text-ink">{firstName ?? 'Welcome'}</p>
         </div>
-        <p className="text-[13px] text-ink-faint">{today()}</p>
+        <Mascot size={58} mood={mood} trackPointer className="-mb-3 shrink-0" label="Chillar" />
       </header>
 
       {/* The one number that matters, on the one glass surface that matters. */}
-      <Card glass className="overflow-hidden px-5 py-5">
+      <Card glass className="hero-card px-5 py-5">
+        {/* The aurora and drifting coins live in their own clipped layer, so the
+            rotating border outside it is not cut off. */}
+        <div aria-hidden className="hero-fx">
+          <span className="hero-aurora hero-aurora-a" />
+          <span className="hero-aurora hero-aurora-b" />
+          {[0, 1, 2, 3].map((i) => (
+            <span key={i} className={`hero-coin hero-coin-${i}`}>
+              ₹
+            </span>
+          ))}
+        </div>
         <div className="flex items-start justify-between">
           <span className="text-[14px] text-ink-soft">Total money</span>
           <button
@@ -66,7 +92,7 @@ export function HomeScreen() {
           {loading ? (
             <Skeleton className="h-[44px] w-48" />
           ) : (
-            <Money paise={dashboard?.ownedMoney} size="display" maskable />
+            <Money paise={owned} size="display" maskable className="hero-amount" />
           )}
         </div>
 
@@ -94,10 +120,10 @@ export function HomeScreen() {
         </p>
 
         {dashboard && dashboard.hasAnyData && (
-          <div className="mt-4 flex items-center justify-between border-t border-[var(--tile-border)] pt-3.5">
+          <div className="relative mt-4 flex items-center justify-between border-t border-[var(--tile-border)] pt-3.5">
             <div>
               <p className="text-[12px] text-ink-muted">Net position</p>
-              <Money paise={dashboard.netPosition} size="lg" maskable className="mt-0.5" />
+              <Money paise={net} size="lg" maskable className="mt-0.5" />
             </div>
             <p className="max-w-[16ch] text-right text-[11.5px] leading-snug text-ink-faint">
               What you hold, plus what is owed to you, minus what you owe
@@ -109,6 +135,8 @@ export function HomeScreen() {
       {/* Where the money is */}
       <div className="grid grid-cols-2 gap-3">
         <BalanceTile
+          tone="#34d399"
+          index={0}
           icon={<Banknote />}
           label="Cash"
           value={dashboard?.byLocation.cash}
@@ -116,6 +144,8 @@ export function HomeScreen() {
           to="/accounts"
         />
         <BalanceTile
+          tone="#5b8cff"
+          index={1}
           icon={<CreditCard />}
           label="Digital"
           value={dashboard?.byLocation.digital}
@@ -123,6 +153,8 @@ export function HomeScreen() {
           to="/accounts"
         />
         <BalanceTile
+          tone="#b06bff"
+          index={2}
           icon={<PiggyBank />}
           label="Savings"
           value={dashboard?.byLocation.savings}
@@ -130,6 +162,8 @@ export function HomeScreen() {
           to="/accounts"
         />
         <BalanceTile
+          tone="#ffb547"
+          index={3}
           icon={<Wallet />}
           label={dashboard?.byPool.find((p) => p.kind === 'dad')?.name ?? 'Dad money'}
           value={dashboard?.byPool.find((p) => p.kind === 'dad')?.balance}
@@ -139,36 +173,46 @@ export function HomeScreen() {
       </div>
 
       {/* Who owes whom */}
-      <List>
-        <Row
-          icon={<IconBadge tone="positive"><UserRoundPlus /></IconBadge>}
-          title="Others owe me"
-          trailing={
-            loading ? <Skeleton className="h-5 w-16" /> : <Money paise={dashboard?.owedToMe} size="md" maskable />
-          }
-          chevron
+      <div className="grid grid-cols-2 gap-3">
+        <NeonTile
+          tone="#2fd3e0"
+          index={4}
+          icon={<UserRoundPlus />}
+          label="Others owe me"
           onClick={() => navigate('/people')}
-        />
-        <Row
-          icon={<IconBadge tone="negative"><UserRoundMinus /></IconBadge>}
-          title="I owe others"
-          trailing={
-            loading ? <Skeleton className="h-5 w-16" /> : <Money paise={dashboard?.iOwe} size="md" maskable />
-          }
-          chevron
+        >
+          {loading ? <Skeleton className="h-5 w-16" /> : <Money paise={dashboard?.owedToMe} size="lg" maskable />}
+        </NeonTile>
+        <NeonTile
+          tone="#ff5d73"
+          index={5}
+          icon={<UserRoundMinus />}
+          label="I owe others"
           onClick={() => navigate('/people')}
-        />
-      </List>
+        >
+          {loading ? <Skeleton className="h-5 w-16" /> : <Money paise={dashboard?.iOwe} size="lg" maskable />}
+        </NeonTile>
+      </div>
 
-      <List>
-        <Row
-          icon={<IconBadge tone="accent"><ChartPie /></IconBadge>}
-          title="Insights"
-          subtitle="Where your money went this week"
-          chevron
-          onClick={() => navigate('/insights')}
+      <button
+        type="button"
+        onClick={() => navigate('/insights')}
+        style={{ '--tone': '#ff7ad9', '--shine-delay': '740ms' } as React.CSSProperties}
+        className="kind-tile group flex w-full items-center gap-3.5 rounded-xl px-4 py-3.5 text-left"
+      >
+        <span aria-hidden className="kind-glow" />
+        <span className="kind-icon grid size-10 shrink-0 place-items-center rounded-[14px] [&>svg]:size-[19px]">
+          <ChartPie />
+        </span>
+        <span className="relative min-w-0 flex-1">
+          <span className="block text-[16px] font-semibold tracking-[-0.01em] text-ink">Insights</span>
+          <span className="block text-[13px] text-ink-muted">Where your money went this week</span>
+        </span>
+        <ChevronRight
+          className="relative size-4 text-ink-faint transition-transform duration-200 ease-out-strong group-active:translate-x-1"
+          aria-hidden
         />
-      </List>
+      </button>
 
       <section>
         <div className="flex items-baseline justify-between">
@@ -218,31 +262,33 @@ export function HomeScreen() {
   );
 }
 
+/** A balance on a neon tile: its own hue, a glow in dark mode, a shine as it arrives. */
 function BalanceTile({
   icon,
   label,
   value,
   loading,
   to,
+  tone,
+  index,
 }: {
   icon: React.ReactNode;
   label: string;
   value: number | null | undefined;
   loading: boolean;
   to: string;
+  tone: string;
+  index: number;
 }) {
   return (
     <Link
       to={to}
-      className={cn(
-        'card flex flex-col gap-2.5 p-4',
-        'transition-transform duration-[140ms] ease-out-strong active:scale-[0.98]',
-      )}
+      style={{ '--tone': tone, '--shine-delay': `${200 + index * 90}ms` } as React.CSSProperties}
+      className="kind-tile flex flex-col gap-2.5 rounded-xl p-4"
     >
-      <IconBadge tone="neutral" size="sm">
-        {icon}
-      </IconBadge>
-      <div>
+      <span aria-hidden className="kind-glow" />
+      <span className="kind-icon grid size-9 place-items-center rounded-[12px] [&>svg]:size-[17px]">{icon}</span>
+      <div className="relative">
         <p className="text-[13px] text-ink-muted">{label}</p>
         {loading ? (
           <Skeleton className="mt-1 h-5 w-20" />
@@ -254,12 +300,45 @@ function BalanceTile({
   );
 }
 
+/** The same tile as a button, for the owed / owing pair. */
+function NeonTile({
+  icon,
+  label,
+  tone,
+  index,
+  onClick,
+  children,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  tone: string;
+  index: number;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{ '--tone': tone, '--shine-delay': `${200 + index * 90}ms` } as React.CSSProperties}
+      className="kind-tile flex flex-col gap-2.5 rounded-xl p-4 text-left"
+    >
+      <span aria-hidden className="kind-glow" />
+      <span className="kind-icon grid size-9 place-items-center rounded-[12px] [&>svg]:size-[17px]">{icon}</span>
+      <div className="relative">
+        <p className="text-[13px] text-ink-muted">{label}</p>
+        <div className="mt-0.5">{children}</div>
+      </div>
+    </button>
+  );
+}
+
 function greeting(): string {
   const hour = new Date().getHours();
-  if (hour < 5) return 'Good night,';
-  if (hour < 12) return 'Good morning,';
-  if (hour < 17) return 'Good afternoon,';
-  return 'Good evening,';
+  if (hour < 5) return 'Good night';
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
+  return 'Good evening';
 }
 
 function today(): string {

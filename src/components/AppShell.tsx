@@ -4,6 +4,7 @@ import { Home, ListTree, Users, MoreHorizontal, Plus, CloudOff } from 'lucide-re
 import { AddTransaction } from './AddTransaction';
 import { AssistantSheet } from './Assistant';
 import { Mascot } from './Mascot';
+import { CelebrationLayer } from './Celebration';
 import { useLedger } from '../store/ledger';
 import { subscribeToOutbox } from '../lib/outbox';
 import { cn } from '../lib/cn';
@@ -133,6 +134,8 @@ export function AppShell({ children }: { children: ReactNode }) {
       </nav>
 
       <AssistantSheet open={asking} onClose={() => setAsking(false)} />
+
+      <CelebrationLayer />
 
       <AddTransaction
         open={adding}

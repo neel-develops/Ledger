@@ -11,6 +11,7 @@ import {
   HeartPulse,
   LogOut,
   Palette,
+  PartyPopper,
   Scale,
   ShieldCheck,
   Tag,
@@ -39,6 +40,8 @@ export function MoreScreen() {
   const { data: session } = useSession();
   const balancesHidden = usePrefs((s) => s.balancesHidden);
   const toggleBalances = usePrefs((s) => s.toggleBalances);
+  const celebrations = usePrefs((s) => s.celebrations);
+  const toggleCelebrations = usePrefs((s) => s.toggleCelebrations);
   const reminderEnabled = usePrefs((s) => s.reminderEnabled);
   const reminderTime = usePrefs((s) => s.reminderTime);
   const theme = usePrefs((s) => s.theme);
@@ -131,6 +134,13 @@ export function MoreScreen() {
             subtitle="Blur every figure at a glance"
             trailing={<Toggle on={balancesHidden} onChange={toggleBalances} />}
             onClick={toggleBalances}
+          />
+          <Row
+            icon={<IconBadge tone="accent" size="sm"><PartyPopper /></IconBadge>}
+            title="Celebrations"
+            subtitle="Chillar reacts when you record something"
+            trailing={<Toggle on={celebrations} onChange={toggleCelebrations} />}
+            onClick={toggleCelebrations}
           />
         </List>
       </section>

@@ -36,6 +36,10 @@ interface PrefsState extends Recents {
   balancesHidden: boolean;
   toggleBalances: () => void;
 
+  /** Chillar's animation when something is recorded. */
+  celebrations: boolean;
+  toggleCelebrations: () => void;
+
   /** Daily nudge to record anything you forgot. Android only. */
   reminderEnabled: boolean;
   reminderTime: string;
@@ -65,6 +69,7 @@ export const usePrefs = create<PrefsState>()(
       ownerId: null,
       theme: 'system' as ThemePreference,
       balancesHidden: false,
+      celebrations: true,
       reminderEnabled: false,
       reminderTime: '21:00',
 
@@ -85,6 +90,8 @@ export const usePrefs = create<PrefsState>()(
       setTheme: (theme) => set({ theme }),
 
       toggleBalances: () => set((s) => ({ balancesHidden: !s.balancesHidden })),
+
+      toggleCelebrations: () => set((s) => ({ celebrations: !s.celebrations })),
 
       setReminder: (enabled, time) =>
         set((s) => ({ reminderEnabled: enabled, reminderTime: time ?? s.reminderTime })),
