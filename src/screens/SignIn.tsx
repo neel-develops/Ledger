@@ -61,9 +61,13 @@ export function SignInScreen() {
     <div className="relative z-10 mx-auto flex min-h-[100svh] w-full max-w-[440px] flex-col justify-center px-5 py-10">
       <div className="animate-rise">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-5 grid size-14 place-items-center rounded-[18px] bg-accent text-white shadow-[0_8px_28px_-8px_rgb(88_86_214/0.6)]">
-            <span className="text-[24px] font-semibold">₹</span>
-          </div>
+          <img
+            src="/logo.svg"
+            alt="Ledger"
+            width={88}
+            height={88}
+            className="logo-float mx-auto mb-5 size-[88px] rounded-[22px] shadow-[0_14px_36px_-10px_rgb(190_70_255/0.65)]"
+          />
           <h1 className="text-[28px] leading-tight font-semibold tracking-[-0.03em]">
             Your money, finally organised.
           </h1>

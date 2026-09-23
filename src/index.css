@@ -367,6 +367,17 @@
   50% { opacity: 1; }
 }
 
+/* The logo on the sign-in screen: one happy hop on arrival, then a slow bob. */
+@keyframes logo-bob {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+  50% { transform: translate3d(0, -5px, 0) rotate(-2deg); }
+}
+.logo-float {
+  animation:
+    mascot-bounce 700ms var(--ease-out-strong) 200ms both,
+    logo-bob 4s ease-in-out 900ms infinite;
+}
+
 .mascot .mascot-body {
   transform-box: fill-box;
   transform-origin: 50% 100%;

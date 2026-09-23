@@ -419,7 +419,7 @@ var schema = z.object({
   /** Public origin of the app, used for cookies, CORS and auth callbacks. */
   APP_URL: optional(z.string().url().default("http://localhost:5173")),
   /** Claude, for the in-app assistant. Optional: without it the assistant says so. */
-  ANTHROPIC_API_KEY: optional(z.string().optional()),
+  GROQ_API_KEY: optional(z.string().optional()),
   /** Supabase Storage — attachments and encrypted backups only. Never data. */
   SUPABASE_URL: optional(z.string().url().optional()),
   SUPABASE_SERVICE_ROLE_KEY: optional(z.string().optional()),
@@ -440,7 +440,7 @@ var isProduction = env.NODE_ENV === "production";
 var hasDatabase = Boolean(env.DATABASE_URL);
 var hasAuthSecret = Boolean(env.BETTER_AUTH_SECRET && env.BETTER_AUTH_SECRET.length >= 32);
 var hasStorage = Boolean(env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY);
-var hasAssistant = Boolean(env.ANTHROPIC_API_KEY);
+var hasAssistant = Boolean(env.GROQ_API_KEY);
 var missingEnv = [
   ...hasDatabase ? [] : ["DATABASE_URL"],
   ...hasAuthSecret ? [] : ["BETTER_AUTH_SECRET"]
@@ -2608,7 +2608,6 @@ import rateLimit2 from "express-rate-limit";
 
 // server/services/assistant.ts
 import { randomUUID as randomUUID2 } from "node:crypto";
-import Anthropic from "@anthropic-ai/sdk";
 import { z as z6 } from "zod";
 
 // server/domain/drafts.ts
@@ -2690,7 +2689,7 @@ var DRAFT_JSON_SCHEMA = {
         properties: {
           personId: { type: ["string", "null"] },
           newPersonName: { type: ["string", "null"] },
-          share: { type: "string", description: "Rupees." }
+          share: { type: "string", description: "What this person owes, in rupees. Always give it." }
         },
         required: ["share"]
       }
@@ -2789,18 +2788,64 @@ function convertDraft(raw, context) {
 }
 
 // server/services/assistant.ts
-var ASSISTANT_MODEL = "claude-opus-5";
+var ASSISTANT_MODEL = "openai/gpt-oss-120b";
+var VISION_MODEL = "qwen/qwen3.8-27b";
+var GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 var MAX_TOOL_ROUNDS = 6;
+var REQUEST_TIMEOUT_MS = 25e3;
+var ModelError = class extends Error {
+  constructor(status, code, message, retryAfterSeconds = null) {
+    super(message);
+    this.status = status;
+    this.code = code;
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+  status;
+  code;
+  retryAfterSeconds;
+};
+function groqClient(apiKey) {
+  return {
+    async chat(request) {
+      let response;
+      try {
+        response = await fetch(GROQ_URL, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify(request),
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+        });
+      } catch (error) {
+        throw new ModelError(null, null, error instanceof Error ? error.message : "network error");
+      }
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        const retryAfter = Number(response.headers.get("retry-after"));
+        throw new ModelError(
+          response.status,
+          body?.error?.code ?? null,
+          body?.error?.message ?? response.statusText,
+          Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : null
+        );
+      }
+      const result = await response.json();
+      console.info(
+        `[assistant] ${request.model} in=${result.usage?.prompt_tokens ?? "?"} out=${result.usage?.completion_tokens ?? "?"}`
+      );
+      return result;
+    }
+  };
+}
 var client = null;
 function getClient() {
   if (client) return client;
-  if (!hasAssistant) {
+  if (!hasAssistant || !env.GROQ_API_KEY) {
     throw serviceUnavailable(
-      "The assistant is not set up yet. Add ANTHROPIC_API_KEY to the deployment to turn it on.",
+      "The assistant is not set up yet. Add GROQ_API_KEY to the deployment to turn it on.",
       "assistant_unavailable"
     );
   }
-  client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+  client = groqClient(env.GROQ_API_KEY);
   return client;
 }
 var IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -2819,11 +2864,12 @@ var assistantRequestSchema = z6.object({
   today: z6.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   timeZoneOffsetMinutes: z6.number().int().min(-720).max(840)
 });
-var SYSTEM_PROMPT = `You are Chillar, the assistant inside Ledger \u2014 a private money app for one person in India. You help them record what happened with their money and check that their books are right. Be warm, brief and plain-spoken; this is a phone screen.
+var SYSTEM_PROMPT = `You are Chillar, the assistant inside Ledger \u2014 a private money app for one person in India. You help them record what happened with their money and check that their books are right. Be warm, brief and plain-spoken; this is a phone screen. Write plain text: no markdown tables, headings or bold. After drafting, do not repeat the drafts' details \u2014 they are already on the cards \u2014 just say in a sentence what you drafted and anything the user should check.
 
 How the ledger works
 - Amounts are rupees. Money sits in ACCOUNTS (where: cash, bank, UPI, savings) and belongs to POOLS (whose: "My money", "Dad money"\u2026). The same cash can be partly Dad's.
 - Lending is not an expense and borrowing is not income. Repayments are settlements, not income or spending. Moving money between accounts or pools, including into savings, is a transfer. Paying a shared bill: only the user's own share is an expense; everyone else's share becomes money they owe.
+- Spending FROM a pool is still an expense: "used 200 of Dad money for petrol" is an expense of 200 with poolId set to Dad money, not a transfer. A transfer is only for money that moves and is not spent, so a transfer never has a category.
 
 Recording transactions
 - You cannot save anything. To record, call propose_transactions. Each draft is checked by the ledger and shown to the user as a card they confirm. Never say something was saved or recorded \u2014 say you have drafted it for them to confirm.
@@ -2833,18 +2879,18 @@ Recording transactions
 - For a receipt photo, read the total and what it was for, then propose it; mention anything you could not read.
 
 Checking the books
-- To verify, use check_ledger and search_transactions. Look for things a person would care about: likely duplicates (same amount, same day, same description), debts that look forgotten, or an account that seems off. Report what you actually found. If everything checks out, say so plainly.
+- To verify, use check_ledger and search_transactions. Look for things a person would care about: likely duplicates (same amount, same day, same description), debts that look forgotten, or an account that seems off. Report what you actually found, and only name checks you actually ran \u2014 check_ledger does not look for duplicates; search_transactions is how you find those. If everything checks out, say so plainly.
 
 Privacy
 - Accounts marked private are hidden from the user's total so that other people glancing at the phone do not see them. Never state, estimate or hint at a private account's balance, and never add it to totals you mention. You may still record transactions into a private account when asked.`;
-var TOOLS = [
+var TOOL_DEFS = [
   {
     name: "propose_transactions",
     description: "Draft one or more transactions for the user to confirm. Nothing is saved until they confirm each card. Returns which drafts were accepted by the ledger and, for any that were not, exactly why.",
-    input_schema: {
+    parameters: {
       type: "object",
       properties: {
-        drafts: { type: "array", items: DRAFT_JSON_SCHEMA, minItems: 1, maxItems: 12 }
+        drafts: { type: "array", items: lenient(DRAFT_JSON_SCHEMA), minItems: 1, maxItems: 12 }
       },
       required: ["drafts"]
     }
@@ -2852,7 +2898,7 @@ var TOOLS = [
   {
     name: "search_transactions",
     description: "Search the user's recorded transactions, newest first. Use it to answer questions about history and to look for duplicates or mistakes.",
-    input_schema: {
+    parameters: {
       type: "object",
       properties: {
         search: { type: "string", description: "Matches notes, people and categories." },
@@ -2867,9 +2913,23 @@ var TOOLS = [
   {
     name: "check_ledger",
     description: "Run the ledger's integrity checks: every transaction balances, no orphaned or broken entries, debts and accounts consistent. Returns each check and what it found.",
-    input_schema: { type: "object", properties: {} }
+    parameters: { type: "object", properties: {} }
   }
 ];
+function lenient(schema2) {
+  const strip = (node) => {
+    if (Array.isArray(node)) return node.map(strip);
+    if (!node || typeof node !== "object") return node;
+    return Object.fromEntries(
+      Object.entries(node).filter(([key]) => key !== "required").map(([key, value]) => [key, strip(value)])
+    );
+  };
+  return strip(schema2);
+}
+var TOOLS = TOOL_DEFS.map((t) => ({
+  type: "function",
+  function: { name: t.name, description: t.description, parameters: t.parameters }
+}));
 async function buildSnapshot(userId2) {
   const [dashboard, people2, categories2, pools] = await Promise.all([
     getDashboard(userId2),
@@ -2902,91 +2962,138 @@ ${JSON.stringify(snapshot)}`,
   };
 }
 async function runAssistant(userId2, request) {
-  const anthropic = getClient();
+  const model = getClient();
   const snapshot = await buildSnapshot(userId2);
   const history = request.messages;
   const last = history[history.length - 1];
   if (!last || last.role !== "user") throw badRequest("The last message must be from you.");
-  const messages = history.slice(0, -1).map((m) => ({
-    role: m.role,
-    content: m.text || "\u2026"
-  }));
-  const latest = [];
+  let said = last.text.trim();
   if (last.image) {
-    latest.push({
-      type: "image",
-      source: { type: "base64", media_type: last.image.mediaType, data: last.image.data }
-    });
-  }
-  latest.push({ type: "text", text: `${snapshot.text}
+    const transcript = await readReceipt(model, last.image);
+    said = `${said || "Here is a receipt."}
 
-Today is ${request.today}.` });
-  latest.push({ type: "text", text: last.text || (last.image ? "Here is a receipt." : "\u2026") });
-  messages.push({ role: "user", content: latest });
+[Photo attached. What it shows, read by the app:]
+${transcript}`;
+  }
+  const messages = [
+    { role: "system", content: SYSTEM_PROMPT },
+    ...history.slice(0, -1).map(
+      (m) => m.role === "user" ? { role: "user", content: m.text || "\u2026" } : { role: "assistant", content: m.text || "\u2026" }
+    ),
+    { role: "user", content: `${snapshot.text}
+
+Today is ${request.today}.
+
+${said || "\u2026"}` }
+  ];
   const drafts = [];
-  const spoken = [];
+  let spoken = "";
   let truncated = false;
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-    let response;
-    try {
-      response = await anthropic.beta.messages.create({
-        model: ASSISTANT_MODEL,
-        max_tokens: 16e3,
-        // If a safety classifier declines, the API re-runs the request on a
-        // recommended fallback model instead of returning a refusal.
-        betas: ["server-side-fallback-2026-07-01"],
-        fallbacks: "default",
-        thinking: { type: "adaptive" },
-        // Conversational and latency-sensitive: medium keeps replies quick
-        // without losing the judgement the accounting rules need.
-        output_config: { effort: "medium" },
-        system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
-        tools: TOOLS,
-        messages
-      });
-    } catch (error) {
-      throw toAppError(error);
-    }
-    for (const block of response.content) {
-      if (block.type === "text" && block.text.trim()) spoken.push(block.text.trim());
-    }
-    if (response.stop_reason === "refusal") {
+    const response = await chatWithRetry(model, {
+      model: ASSISTANT_MODEL,
+      messages,
+      tools: TOOLS,
+      // Conversational and latency-sensitive: medium keeps replies quick
+      // without losing the judgement the accounting rules need.
+      reasoning_effort: "medium",
+      max_completion_tokens: 8e3,
+      temperature: 0.3
+    });
+    const choice = response.choices[0];
+    if (!choice) break;
+    const text2 = choice.message.content?.replace(/\*\*(.+?)\*\*/g, "$1").trim();
+    if (text2) spoken = text2;
+    if (choice.finish_reason === "content_filter") {
       return {
         reply: "I can\u2019t help with that one. I\u2019m happy to record transactions or check your books.",
         drafts,
         truncated: false
       };
     }
-    if (response.stop_reason === "max_tokens") {
+    if (choice.finish_reason === "length") {
       truncated = true;
       break;
     }
-    messages.push({ role: "assistant", content: response.content });
-    if (response.stop_reason === "pause_turn") continue;
-    if (response.stop_reason !== "tool_use") break;
-    const calls = response.content.filter(
-      (b) => b.type === "tool_use"
-    );
-    const results = await Promise.all(
-      calls.map(async (call) => {
-        try {
-          const output = await runTool(userId2, call, request, snapshot.people, drafts);
-          return { type: "tool_result", tool_use_id: call.id, content: output };
-        } catch (error) {
-          const message = error instanceof Error ? error.message : "That tool failed.";
-          return { type: "tool_result", tool_use_id: call.id, content: message, is_error: true };
-        }
-      })
-    );
-    messages.push({ role: "user", content: results });
+    const calls = choice.message.tool_calls ?? [];
+    if (calls.length === 0) break;
+    messages.push({ role: "assistant", content: choice.message.content ?? null, tool_calls: calls });
+    for (const call of calls) {
+      let output;
+      try {
+        output = await runTool(userId2, call, request, snapshot.people, drafts);
+      } catch (error) {
+        output = `Error: ${error instanceof Error ? error.message : "That tool failed."}`;
+      }
+      messages.push({ role: "tool", tool_call_id: call.id, content: output });
+    }
     if (round === MAX_TOOL_ROUNDS - 1) truncated = true;
   }
-  const reply = spoken.length > 0 ? spoken[spoken.length - 1] : drafts.length > 0 ? `I\u2019ve drafted ${drafts.length === 1 ? "this" : "these"} for you to confirm.` : "I\u2019m not sure what to do with that. Could you tell me a little more?";
+  const reply = spoken || (drafts.length > 0 ? `I\u2019ve drafted ${drafts.length === 1 ? "this" : "these"} for you to confirm.` : "I\u2019m not sure what to do with that. Could you tell me a little more?");
   return { reply, drafts, truncated };
 }
+var FALLBACK_MODELS = { [ASSISTANT_MODEL]: "openai/gpt-oss-20b" };
+var MAX_RATE_LIMIT_WAIT_SECONDS = 8;
+var sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+async function chatWithRetry(model, request) {
+  let current = request;
+  let retriedToolCall = false;
+  let waited = false;
+  for (; ; ) {
+    try {
+      return await model.chat(current);
+    } catch (error) {
+      if (!(error instanceof ModelError)) throw toAppError(error);
+      if (error.code === "tool_use_failed" && !retriedToolCall) {
+        retriedToolCall = true;
+        continue;
+      }
+      if (error.status === 429) {
+        const wait = error.retryAfterSeconds;
+        if (!waited && wait !== null && wait <= MAX_RATE_LIMIT_WAIT_SECONDS) {
+          waited = true;
+          await sleep(wait * 1e3);
+          continue;
+        }
+        const fallback = FALLBACK_MODELS[current.model];
+        if (fallback) {
+          current = { ...current, model: fallback };
+          continue;
+        }
+      }
+      throw toAppError(error);
+    }
+  }
+}
+var RECEIPT_PROMPT = `Read this image for a personal finance app. If it is a receipt, bill, invoice or payment screenshot, transcribe: the merchant, the date, each line item with its amount, taxes or tips, the grand total, and how it was paid if shown. Use the amounts exactly as printed. If something is unreadable, say so rather than guessing. If it is not a receipt, describe in one or two sentences what it shows. Plain text only.`;
+async function readReceipt(model, image) {
+  const response = await chatWithRetry(model, {
+    model: VISION_MODEL,
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: RECEIPT_PROMPT },
+          { type: "image_url", image_url: { url: `data:${image.mediaType};base64,${image.data}` } }
+        ]
+      }
+    ],
+    // The free tier caps this model at 1,000 output tokens a minute; a transcript needs far fewer.
+    max_completion_tokens: 700,
+    temperature: 0
+  });
+  const text2 = (response.choices[0]?.message.content ?? "").replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+  return text2 || "The photo could not be read.";
+}
 async function runTool(userId2, call, request, people2, drafts) {
-  const input = call.input ?? {};
-  switch (call.name) {
+  let input;
+  try {
+    const parsed2 = JSON.parse(call.function.arguments || "{}");
+    input = parsed2 && typeof parsed2 === "object" && !Array.isArray(parsed2) ? parsed2 : {};
+  } catch {
+    return "Error: the arguments were not valid JSON. Send the call again with valid JSON.";
+  }
+  switch (call.function.name) {
     case "propose_transactions": {
       const raw = Array.isArray(input.drafts) ? input.drafts : [];
       if (raw.length === 0) return "No drafts were given.";
@@ -3057,27 +3164,25 @@ async function runTool(userId2, call, request, people2, drafts) {
       });
     }
     default:
-      return `There is no tool called ${call.name}.`;
+      return `There is no tool called ${call.function.name}.`;
   }
 }
 function toAppError(error) {
-  if (error instanceof Anthropic.AuthenticationError || error instanceof Anthropic.PermissionDeniedError) {
-    return serviceUnavailable("The assistant\u2019s API key was rejected. Check ANTHROPIC_API_KEY.", "assistant_misconfigured");
+  if (!(error instanceof ModelError)) return error instanceof Error ? error : new Error(String(error));
+  if (error.status === 401 || error.status === 403) {
+    return serviceUnavailable("The assistant\u2019s API key was rejected. Check GROQ_API_KEY.", "assistant_misconfigured");
   }
-  if (error instanceof Anthropic.RateLimitError) {
-    return tooManyRequests("The assistant is getting a lot of requests. Try again in a minute.");
+  if (error.status === 429) {
+    return tooManyRequests("Chillar needs a breather \u2014 the free plan allows only a few questions a minute. Try again shortly.");
   }
-  if (error instanceof Anthropic.BadRequestError) {
-    console.error("[assistant] request rejected", error.message);
+  if (error.status === 400 || error.status === 413) {
+    console.error("[assistant] request rejected", error.code, error.message);
     return serviceUnavailable("The assistant could not handle that request. Nothing was changed.", "assistant_failed");
   }
-  if (error instanceof Anthropic.APIConnectionError) {
+  if (error.status === null) {
     return serviceUnavailable("Could not reach the assistant. Nothing was changed.", "assistant_failed");
   }
-  if (error instanceof Anthropic.APIError) {
-    return serviceUnavailable("The assistant is unavailable right now. Nothing was changed.", "assistant_failed");
-  }
-  return error instanceof Error ? error : new Error(String(error));
+  return serviceUnavailable("The assistant is unavailable right now. Nothing was changed.", "assistant_failed");
 }
 
 // server/services/attachments.ts

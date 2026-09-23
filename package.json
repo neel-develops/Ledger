@@ -28,7 +28,6 @@
     "build:api": "tsx scripts/build-api.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.128.0",
     "@capacitor/android": "^8.5.2",
     "@capacitor/app": "^8.1.1",
     "@capacitor/core": "^8.5.2",
@@ -64,6 +63,7 @@
     "@electric-sql/pglite": "^0.5.8",
     "@electric-sql/pglite-socket": "^0.2.11",
     "@eslint/js": "^9.17.0",
+    "@resvg/resvg-js": "^2.6.2",
     "@tailwindcss/vite": "^4.0.0",
     "@types/cookie-parser": "^1.4.8",
     "@types/express": "^4.17.21",

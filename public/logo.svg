@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#6a4dff"/>
+    <stop offset="0.5" stop-color="#d54bff"/>
+    <stop offset="1" stop-color="#ff7a59"/>
+  </linearGradient>
+  <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+    <stop offset="0" stop-color="#fff6c9" stop-opacity="0.95"/>
+    <stop offset="0.45" stop-color="#ffd86b" stop-opacity="0.35"/>
+    <stop offset="1" stop-color="#ffd86b" stop-opacity="0"/>
+  </radialGradient>
+  <linearGradient id="face" x1="0" y1="0" x2="0.9" y2="1">
+    <stop offset="0" stop-color="#b3b1ff"/>
+    <stop offset="0.55" stop-color="#6f6cf0"/>
+    <stop offset="1" stop-color="#4642c4"/>
+  </linearGradient>
+  <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#3a37a8"/>
+    <stop offset="1" stop-color="#231f78"/>
+  </linearGradient>
+  <radialGradient id="gloss" cx="0.32" cy="0.24" r="0.55">
+    <stop offset="0" stop-color="#ffffff" stop-opacity="0.8"/>
+    <stop offset="0.45" stop-color="#ffffff" stop-opacity="0.12"/>
+    <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+  </radialGradient>
+  <radialGradient id="gold" cx="0.35" cy="0.3" r="0.75">
+    <stop offset="0" stop-color="#fff1b8"/>
+    <stop offset="0.55" stop-color="#f7c443"/>
+    <stop offset="1" stop-color="#cf8e12"/>
+  </radialGradient>
+  <clipPath id="mouth">
+    <path d="M40 72 Q60 70 80 72 Q78 100 60 101 Q42 100 40 72 Z"/>
+  </clipPath>
+</defs><clipPath id="sq"><rect width="1024" height="1024" rx="230"/></clipPath>
+   <g clip-path="url(#sq)"><rect width="1024" height="1024" fill="url(#bg)"/>
+    <g fill="#ffffff" opacity="0.13"><path d="M512 532.48 L1536.0 532.5 L1458.1 924.3 Z"/><path d="M512 532.48 L1236.1 1256.6 L903.9 1478.5 Z"/><path d="M512 532.48 L512.0 1556.5 L120.1 1478.5 Z"/><path d="M512 532.48 L-212.1 1256.6 L-434.1 924.3 Z"/><path d="M512 532.48 L-512.0 532.5 L-434.1 140.6 Z"/><path d="M512 532.48 L-212.1 -191.6 L120.1 -413.6 Z"/><path d="M512 532.48 L512.0 -491.5 L903.9 -413.6 Z"/><path d="M512 532.48 L1236.1 -191.6 L1458.1 140.6 Z"/></g>
+    <circle cx="512" cy="532.48" r="430.08" fill="url(#glow)"/>
+    
+  <g transform="translate(174.07999999999998 225.27999999999997) rotate(-24)">
+    <ellipse cx="0" cy="10.752" rx="76.8" ry="70.656" fill="#b0730a"/>
+    <ellipse cx="0" cy="0" rx="76.8" ry="70.656" fill="url(#gold)"/>
+    <ellipse cx="0" cy="0" rx="56.832" ry="52.224000000000004" fill="none" stroke="#fff4c7" stroke-opacity="0.6" stroke-width="5.376"/>
+    <text x="0" y="27.648" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-weight="800" font-size="80.64" fill="#9a6206">₹</text>
+  </g>
+    
+  <g transform="translate(870.4 716.8) rotate(28)">
+    <ellipse cx="0" cy="8.88832" rx="63.488" ry="58.40896" fill="#b0730a"/>
+    <ellipse cx="0" cy="0" rx="63.488" ry="58.40896" fill="url(#gold)"/>
+    <ellipse cx="0" cy="0" rx="46.98112" ry="43.17184" fill="none" stroke="#fff4c7" stroke-opacity="0.6" stroke-width="4.44416"/>
+    <text x="0" y="22.85568" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-weight="800" font-size="66.6624" fill="#9a6206">₹</text>
+  </g>
+    
+  <g transform="translate(204.8 849.9200000000001) rotate(14)">
+    <ellipse cx="0" cy="7.168000000000001" rx="51.2" ry="47.104000000000006" fill="#b0730a"/>
+    <ellipse cx="0" cy="0" rx="51.2" ry="47.104000000000006" fill="url(#gold)"/>
+    <ellipse cx="0" cy="0" rx="37.888" ry="34.816" fill="none" stroke="#fff4c7" stroke-opacity="0.6" stroke-width="3.5840000000000005"/>
+    <text x="0" y="18.432" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-weight="800" font-size="53.760000000000005" fill="#9a6206">₹</text>
+  </g>
+    <path transform="translate(819.2 204.8)" fill="#ffffff" opacity="1" d="M0 -56.32 Q11.264000000000001 -11.264000000000001 56.32 0 Q11.264000000000001 11.264000000000001 0 56.32 Q-11.264000000000001 11.264000000000001 -56.32 0 Q-11.264000000000001 -11.264000000000001 0 -56.32 Z"/>
+    <path transform="translate(102.39999999999998 563.2)" fill="#ffffff" opacity="0.9" d="M0 -32.768 Q6.5536 -6.5536 32.768 0 Q6.5536 6.5536 0 32.768 Q-6.5536 6.5536 -32.768 0 Q-6.5536 -6.5536 0 -32.768 Z"/>
+    <path transform="translate(686.08 931.8399999999999)" fill="#ffffff" opacity="0.85" d="M0 -28.672 Q5.734400000000001 -5.734400000000001 28.672 0 Q5.734400000000001 5.734400000000001 0 28.672 Q-5.734400000000001 5.734400000000001 -28.672 0 Q-5.734400000000001 -5.734400000000001 0 -28.672 Z"/>
+    <path transform="translate(942.0799999999999 460.8)" fill="#ffffff" opacity="0.8" d="M0 -22.528 Q4.5056 -4.5056 22.528 0 Q4.5056 4.5056 0 22.528 Q-4.5056 4.5056 -22.528 0 Q-4.5056 -4.5056 0 -22.528 Z"/>
+    <g transform="rotate(-9 512 527.36) translate(204.8 209.92000000000002) scale(5.12)">
+  <ellipse cx="60" cy="121" rx="34" ry="5.5" fill="#1b0f4a" opacity="0.28"/>
+
+  <!-- A sticker-style outline, so the coin lifts off a background of the same hue. -->
+  <path d="M60 22 C60 15 63 10 67 7" stroke="#ffffff" stroke-width="9" stroke-linecap="round" fill="none"/>
+  <circle cx="68" cy="6.5" r="10.5" fill="#ffffff"/>
+  <ellipse cx="60" cy="65.5" rx="49" ry="50" fill="#ffffff"/>
+  <path d="M60 22 C60 15 63 10 67 7" stroke="#3a37a8" stroke-width="3.4" stroke-linecap="round" fill="none"/>
+  <circle cx="68" cy="6.5" r="7.5" fill="url(#gold)"/>
+  <text x="68" y="10" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="10" font-weight="800" fill="#9a6206">₹</text>
+  <ellipse cx="60" cy="69" rx="45" ry="43" fill="url(#rim)"/>
+  <ellipse cx="60" cy="62" rx="45" ry="42" fill="url(#face)"/>
+  <ellipse cx="60" cy="62" rx="38.5" ry="36" fill="none" stroke="#ffffff" stroke-opacity="0.2" stroke-width="1.6"/>
+  <ellipse cx="60" cy="62" rx="45" ry="42" fill="url(#gloss)"/>
+
+  <ellipse cx="31" cy="75" rx="8" ry="5" fill="#ff8fb3" opacity="0.6"/>
+  <ellipse cx="89" cy="75" rx="8" ry="5" fill="#ff8fb3" opacity="0.6"/>
+
+  <g stroke="#1a1850" stroke-width="5.2" stroke-linecap="round" fill="none">
+    <path d="M35 58 Q44 45 53 58"/>
+    <path d="M67 58 Q76 45 85 58"/>
+  </g>
+
+  <path d="M40 72 Q60 70 80 72 Q78 100 60 101 Q42 100 40 72 Z" fill="#1a1850"/>
+  <g clip-path="url(#mouth)">
+    <path d="M40 71 Q60 69 80 71 L80 78 Q60 80.5 40 78 Z" fill="#ffffff"/>
+    <ellipse cx="60" cy="99" rx="14" ry="10" fill="#ff6f9c"/>
+    <path d="M60 91 L60 97" stroke="#d94d7c" stroke-width="1.6" stroke-linecap="round"/>
+  </g>
+</g>
+  </g></svg>

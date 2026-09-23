@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { eq, sql } from 'drizzle-orm';
-import type Anthropic from '@anthropic-ai/sdk';
 import { getDb } from '../server/db/client';
 import { createTestDatabase } from './helpers/testDatabase';
 import { users, accounts, transactions, attachments } from '../server/db/schema';
@@ -11,7 +10,11 @@ import {
   runAssistant,
   __setAssistantClientForTesting,
   ASSISTANT_MODEL,
+  VISION_MODEL,
+  ModelError,
   type AssistantClient,
+  type ChatRequest,
+  type ChatResponse,
 } from '../server/services/assistant';
 import {
   addAttachment,
@@ -33,32 +36,44 @@ import { __setStorageForTesting, type StorageBackend } from '../server/services/
 const USER = 'assistant-test-user';
 const OTHER = 'assistant-other-user';
 
-function message(content: unknown[], stop_reason: string): Anthropic.Beta.BetaMessage {
+let callSeq = 0;
+
+/** A model turn: optional text, optional tool calls with their arguments. */
+function message(
+  text: string | null,
+  calls: { name: string; args: unknown }[] = [],
+  finish_reason = calls.length ? 'tool_calls' : 'stop',
+): ChatResponse {
   return {
-    id: `msg_${Math.random().toString(36).slice(2)}`,
-    type: 'message',
-    role: 'assistant',
-    model: ASSISTANT_MODEL,
-    content,
-    stop_reason,
-    stop_sequence: null,
-    usage: { input_tokens: 10, output_tokens: 10 },
-  } as unknown as Anthropic.Beta.BetaMessage;
+    choices: [
+      {
+        message: {
+          role: 'assistant',
+          content: text,
+          tool_calls: calls.length
+            ? calls.map((c) => ({
+                id: `call_${++callSeq}`,
+                type: 'function' as const,
+                function: { name: c.name, arguments: typeof c.args === 'string' ? c.args : JSON.stringify(c.args) },
+              }))
+            : undefined,
+        },
+        finish_reason,
+      },
+    ],
+  };
 }
 
 /** Replays a fixed script and records every request it was sent. */
-function scriptedClient(script: Anthropic.Beta.BetaMessage[]) {
-  const requests: Anthropic.Beta.MessageCreateParamsNonStreaming[] = [];
+function scriptedClient(script: (ChatResponse | Error)[]) {
+  const requests: ChatRequest[] = [];
   const client: AssistantClient = {
-    beta: {
-      messages: {
-        async create(params) {
-          requests.push(structuredClone(params));
-          const next = script.shift();
-          if (!next) throw new Error('script exhausted');
-          return next;
-        },
-      },
+    async chat(params) {
+      requests.push(structuredClone(params));
+      const next = script.shift();
+      if (!next) throw new Error('script exhausted');
+      if (next instanceof Error) throw next;
+      return next;
     },
   };
   return { client, requests };
@@ -121,29 +136,24 @@ describe('assistant and receipts', () => {
     const before = await countTransactions(USER);
 
     const { client, requests } = scriptedClient([
-      message(
-        [
-          {
-            type: 'tool_use',
-            id: 'toolu_1',
-            name: 'propose_transactions',
-            input: {
-              drafts: [
-                { kind: 'expense', amount: '240', summary: 'Lunch, ₹240', accountId: cash },
-                {
-                  kind: 'paid_for_someone',
-                  amount: '1200',
-                  summary: 'Dinner split',
-                  myShare: '400',
-                  participants: [{ personId: rahul, share: '700' }],
-                },
-              ],
-            },
+      message(null, [
+        {
+          name: 'propose_transactions',
+          args: {
+            drafts: [
+              { kind: 'expense', amount: '240', summary: 'Lunch, ₹240', accountId: cash },
+              {
+                kind: 'paid_for_someone',
+                amount: '1200',
+                summary: 'Dinner split',
+                myShare: '400',
+                participants: [{ personId: rahul, share: '700' }],
+              },
+            ],
           },
-        ],
-        'tool_use',
-      ),
-      message([{ type: 'text', text: 'Drafted lunch for you to confirm. The dinner split did not add up.' }], 'end_turn'),
+        },
+      ]),
+      message('Drafted lunch for you to confirm. The dinner split did not add up.'),
     ]);
     __setAssistantClientForTesting(client);
 
@@ -155,8 +165,9 @@ describe('assistant and receipts', () => {
     expect(result.drafts[0]?.payload.accountId).toBe(cash);
     expect(result.reply).toMatch(/confirm/);
 
-    // The bad one went back to the model with a reason it can act on.
+    // The bad one went back to the model, tied to its call, with a reason it can act on.
     const followUp = requests[1]!.messages.at(-1)!;
+    expect(followUp.role).toBe('tool');
     const toolResult = JSON.stringify(followUp.content);
     expect(toolResult).toContain('rejected');
     expect(toolResult).toMatch(/do not add up/);
@@ -165,21 +176,25 @@ describe('assistant and receipts', () => {
     expect(await countTransactions(USER)).toBe(before);
   });
 
-  it('asks the API for the right model, with refusal fallbacks on', async () => {
-    const { client, requests } = scriptedClient([message([{ type: 'text', text: 'Hi!' }], 'end_turn')]);
+  it('asks Groq for the reasoning model, with the ledger tools', async () => {
+    const { client, requests } = scriptedClient([message('Hi!')]);
     __setAssistantClientForTesting(client);
 
     await runAssistant(USER, request('hello'));
 
     const sent = requests[0]!;
-    expect(sent.model).toBe('claude-opus-5');
-    expect(sent.fallbacks).toBe('default');
-    expect(sent.betas).toContain('server-side-fallback-2026-07-01');
-    expect(sent.thinking).toEqual({ type: 'adaptive' });
+    expect(sent.model).toBe('openai/gpt-oss-120b');
+    expect(sent.reasoning_effort).toBe('medium');
+    expect(sent.tools?.map((t) => t.function.name)).toEqual([
+      'propose_transactions',
+      'search_transactions',
+      'check_ledger',
+    ]);
+    expect(sent.messages[0]?.role).toBe('system');
   });
 
   it('never puts a private account balance in the model’s context', async () => {
-    const { client, requests } = scriptedClient([message([{ type: 'text', text: 'ok' }], 'end_turn')]);
+    const { client, requests } = scriptedClient([message('ok')]);
     __setAssistantClientForTesting(client);
 
     await runAssistant(USER, request('how much money do I have?'));
@@ -189,24 +204,19 @@ describe('assistant and receipts', () => {
     expect(context).not.toContain('12,345.67');
     expect(context).not.toContain('1234567');
     // The account is still named, so it can be recorded into — just without a balance.
-    // (The snapshot is JSON inside a text block, so its quotes arrive escaped.)
+    // (The snapshot is JSON inside a text message, so its quotes arrive escaped.)
     expect(context).toContain('\\"private\\":true');
   });
 
   it('drafts a debt to someone new without creating them until confirmed', async () => {
     const { client } = scriptedClient([
-      message(
-        [
-          {
-            type: 'tool_use',
-            id: 'toolu_2',
-            name: 'propose_transactions',
-            input: { drafts: [{ kind: 'lend', amount: '300', summary: 'Lent Priya ₹300', newPersonName: 'Priya' }] },
-          },
-        ],
-        'tool_use',
-      ),
-      message([{ type: 'text', text: 'Drafted.' }], 'end_turn'),
+      message(null, [
+        {
+          name: 'propose_transactions',
+          args: { drafts: [{ kind: 'lend', amount: '300', summary: 'Lent Priya ₹300', newPersonName: 'Priya' }] },
+        },
+      ]),
+      message('Drafted.'),
     ]);
     __setAssistantClientForTesting(client);
 
@@ -216,8 +226,65 @@ describe('assistant and receipts', () => {
     expect(Object.keys(draft.newPeople)).toContain(draft.payload.personId);
   });
 
-  it('turns a refusal into a polite answer instead of an error', async () => {
-    const { client } = scriptedClient([message([], 'refusal')]);
+  it('reads a receipt photo with the vision model, then drafts from the transcript', async () => {
+    const { client, requests } = scriptedClient([
+      message('<think>looking</think>Cafe Mocha, 12 Sep. Cappuccino 180. Total ₹180. Paid by card.'),
+      message(null, [
+        { name: 'propose_transactions', args: { drafts: [{ kind: 'expense', amount: '180', summary: 'Cafe Mocha' }] } },
+      ]),
+      message('Drafted Cafe Mocha for you to confirm.'),
+    ]);
+    __setAssistantClientForTesting(client);
+
+    const result = await runAssistant(USER, {
+      ...request(''),
+      messages: [{ role: 'user', text: '', image: { mediaType: 'image/jpeg', data: 'abcd' } }],
+    });
+
+    // The photo only ever goes to the vision model…
+    expect(requests[0]!.model).toBe(VISION_MODEL);
+    expect(JSON.stringify(requests[0]!.messages)).toContain('data:image/jpeg;base64,abcd');
+    // …and the reasoning model gets the transcript, minus any thinking tags.
+    const handedOver = JSON.stringify(requests[1]!.messages);
+    expect(requests[1]!.model).toBe(ASSISTANT_MODEL);
+    expect(handedOver).toContain('Cafe Mocha, 12 Sep');
+    expect(handedOver).not.toContain('<think>');
+    expect(handedOver).not.toContain('base64');
+    expect(result.drafts[0]?.amount).toBe(18000);
+  });
+
+  it('retries once when the model writes a malformed tool call', async () => {
+    const { client, requests } = scriptedClient([
+      new ModelError(400, 'tool_use_failed', 'Failed to call a function'),
+      message('Hello again.'),
+    ]);
+    __setAssistantClientForTesting(client);
+
+    const result = await runAssistant(USER, request('hi'));
+    expect(requests).toHaveLength(2);
+    expect(result.reply).toBe('Hello again.');
+  });
+
+  it('sends broken tool arguments back to the model instead of failing', async () => {
+    const { client, requests } = scriptedClient([
+      message(null, [{ name: 'check_ledger', args: '{not json' }]),
+      message('Let me try that again.'),
+    ]);
+    __setAssistantClientForTesting(client);
+
+    await runAssistant(USER, request('check my books'));
+    expect(JSON.stringify(requests[1]!.messages.at(-1))).toMatch(/not valid JSON/);
+  });
+
+  it('turns a rejected key into a clear setup message', async () => {
+    const { client } = scriptedClient([new ModelError(401, 'invalid_api_key', 'Invalid API Key')]);
+    __setAssistantClientForTesting(client);
+
+    await expect(runAssistant(USER, request('hi'))).rejects.toThrow(/GROQ_API_KEY/);
+  });
+
+  it('turns a filtered answer into a polite reply instead of an error', async () => {
+    const { client } = scriptedClient([message(null, [], 'content_filter')]);
     __setAssistantClientForTesting(client);
 
     const result = await runAssistant(USER, request('something off-topic'));

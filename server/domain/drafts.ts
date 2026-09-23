@@ -114,7 +114,7 @@ export const DRAFT_JSON_SCHEMA = {
         properties: {
           personId: { type: ['string', 'null'] },
           newPersonName: { type: ['string', 'null'] },
-          share: { type: 'string', description: 'Rupees.' },
+          share: { type: 'string', description: 'What this person owes, in rupees. Always give it.' },
         },
         required: ['share'],
       },
