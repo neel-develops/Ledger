@@ -308,6 +308,40 @@ export interface CreateResult {
  * or the database rolls back and nothing at all is written. There is no code
  * path that commits a partial financial record.
  */
+export interface TransactionPreview {
+  amount: number;
+  entries: BuiltEntry[];
+}
+
+/**
+ * Run a proposed transaction through the real ledger engine WITHOUT writing
+ * anything.
+ *
+ * This is how the assistant's drafts are checked: the exact same reference
+ * resolution and double-entry construction that `createTransaction` uses, so
+ * a draft that previews cleanly is a draft that will save cleanly. Nothing an
+ * AI proposes reaches the user unless it already balances.
+ *
+ * `extraPersonIds` stands in for people who do not exist yet — "paid for
+ * Priya" when Priya is new — so the rest of the draft can still be verified.
+ */
+export async function previewTransaction(
+  userId: string,
+  input: CreateTransactionInput,
+  options: { extraPersonIds?: string[] } = {},
+): Promise<TransactionPreview> {
+  const refs = await loadRefs(getDb(), userId);
+  for (const id of options.extraPersonIds ?? []) refs.personIds.add(id);
+
+  try {
+    const entries = buildEntries(toIntent(input, refs));
+    return { amount: headlineAmount(input.kind, entries), entries };
+  } catch (error) {
+    if (error instanceof LedgerError) throw badRequest(error.message, error.code);
+    throw error;
+  }
+}
+
 export async function createTransaction(
   userId: string,
   input: CreateTransactionInput,

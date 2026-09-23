@@ -1,20 +1,26 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { NavLink, useLocation, useSearchParams } from 'react-router-dom';
-import { Home, ListTree, Users, ChartPie, MoreHorizontal, Plus, CloudOff } from 'lucide-react';
+import { Home, ListTree, Users, MoreHorizontal, Plus, CloudOff } from 'lucide-react';
 import { AddTransaction } from './AddTransaction';
+import { AssistantSheet } from './Assistant';
+import { Mascot } from './Mascot';
 import { useLedger } from '../store/ledger';
 import { subscribeToOutbox } from '../lib/outbox';
 import { cn } from '../lib/cn';
 import type { TransactionKind } from '@shared/domain';
 import type { TransactionDraft } from '@shared/nlp';
 
-const TABS = [
+const LEFT_TABS = [
   { to: '/', label: 'Home', icon: Home, end: true },
   { to: '/activity', label: 'Activity', icon: ListTree },
+] as const;
+
+const RIGHT_TABS = [
   { to: '/people', label: 'People', icon: Users },
-  { to: '/insights', label: 'Insights', icon: ChartPie },
   { to: '/more', label: 'More', icon: MoreHorizontal },
 ] as const;
+
+type Tab = { to: string; label: string; icon: typeof Home; end?: boolean };
 
 /**
  * The app shell. One column on a phone, the same column centred on a desktop —
@@ -22,6 +28,7 @@ const TABS = [
  */
 export function AppShell({ children }: { children: ReactNode }) {
   const [adding, setAdding] = useState(false);
+  const [asking, setAsking] = useState(false);
   const [presetKind, setPresetKind] = useState<TransactionKind | null>(null);
   const pendingCount = useLedger((s) => s.pendingCount);
   const setPendingCount = useLedger((s) => s.setPendingCount);
@@ -94,32 +101,38 @@ export function AppShell({ children }: { children: ReactNode }) {
       </button>
 
       <nav className="fixed inset-x-0 bottom-0 z-30 mx-auto w-full max-w-[560px] px-4 pb-safe">
-        <div className="glass-strong mb-3 flex items-center justify-between rounded-[22px] px-2 py-1.5 shadow-card">
-          {TABS.map((tab) => (
-            <NavLink
-              key={tab.to}
-              to={tab.to}
-              end={'end' in tab ? tab.end : false}
-              className={({ isActive }) =>
-                cn(
-                  'flex min-w-[56px] flex-col items-center gap-0.5 rounded-[14px] px-2 py-1.5',
-                  // Navigation is used constantly, so it changes colour rather
-                  // than animating. Nothing here should ever feel delayed.
-                  'transition-colors duration-150 ease-out',
-                  isActive ? 'text-accent' : 'text-ink-muted',
-                )
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  <tab.icon className="size-[19px]" strokeWidth={isActive ? 2.3 : 1.9} aria-hidden />
-                  <span className="text-[10.5px] font-medium tracking-[0.01em]">{tab.label}</span>
-                </>
+        <div className="glass-strong relative mb-3 grid grid-cols-5 items-end rounded-[22px] px-1 py-1.5 shadow-card">
+          {LEFT_TABS.map((tab) => (
+            <TabLink key={tab.to} tab={tab} />
+          ))}
+
+          {/*
+            Chillar sits raised in the centre of the bar: the one button that
+            can do everything the others can, by just being asked.
+          */}
+          <div className="flex justify-center">
+            <button
+              type="button"
+              onClick={() => setAsking(true)}
+              aria-label="Ask Chillar"
+              className={cn(
+                'orb-halo -mt-7 grid size-[62px] place-items-center rounded-full',
+                'border border-[var(--glass-border-strong)] bg-[var(--glass-bg-strong)] backdrop-blur-xl',
+                'shadow-[0_10px_28px_-8px_rgb(88_86_214/0.55)]',
+                'transition-transform duration-[160ms] ease-out-strong active:scale-[0.92]',
               )}
-            </NavLink>
+            >
+              <Mascot size={48} className="-mb-0.5" />
+            </button>
+          </div>
+
+          {RIGHT_TABS.map((tab) => (
+            <TabLink key={tab.to} tab={tab} />
           ))}
         </div>
       </nav>
+
+      <AssistantSheet open={asking} onClose={() => setAsking(false)} />
 
       <AddTransaction
         open={adding}
@@ -154,6 +167,30 @@ function emptyDraftFor(kind: TransactionKind): TransactionDraft {
     confidence: 'high',
     missing: [],
   };
+}
+
+function TabLink({ tab }: { tab: Tab }) {
+  return (
+    <NavLink
+      to={tab.to}
+      end={tab.end ?? false}
+      className={({ isActive }) =>
+        cn(
+          'flex flex-col items-center gap-0.5 rounded-[14px] px-1 py-1.5',
+          // Used constantly, so it changes colour rather than animating.
+          'transition-colors duration-150 ease-out',
+          isActive ? 'text-accent' : 'text-ink-muted',
+        )
+      }
+    >
+      {({ isActive }) => (
+        <>
+          <tab.icon className="size-[19px]" strokeWidth={isActive ? 2.3 : 1.9} aria-hidden />
+          <span className="text-[10.5px] font-medium tracking-[0.01em]">{tab.label}</span>
+        </>
+      )}
+    </NavLink>
+  );
 }
 
 /** Screen header. Large title, optional trailing control. */

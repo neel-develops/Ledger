@@ -8,7 +8,7 @@ import {
   UserRoundPlus,
   UserRoundMinus,
   Wallet,
-  Sparkles,
+  ChartPie,
 } from 'lucide-react';
 import { useLedger } from '../store/ledger';
 import { usePrefs } from '../store/prefs';
@@ -18,6 +18,7 @@ import { Card, EmptyState, IconBadge, List, Row, SectionLabel, Skeleton } from '
 import { TransactionRow } from '../components/TransactionRow';
 import { ErrorState } from '../components/ErrorState';
 import { cn } from '../lib/cn';
+import { Mascot } from '../components/Mascot';
 
 export function HomeScreen() {
   const navigate = useNavigate();
@@ -159,6 +160,16 @@ export function HomeScreen() {
         />
       </List>
 
+      <List>
+        <Row
+          icon={<IconBadge tone="accent"><ChartPie /></IconBadge>}
+          title="Insights"
+          subtitle="Where your money went this week"
+          chevron
+          onClick={() => navigate('/insights')}
+        />
+      </List>
+
       <section>
         <div className="flex items-baseline justify-between">
           <SectionLabel>Recent</SectionLabel>
@@ -196,7 +207,7 @@ export function HomeScreen() {
         ) : (
           <Card>
             <EmptyState
-              icon={<Sparkles />}
+              icon={<span className="grid place-items-center"><Mascot size={46} /></span>}
               title="No transactions yet"
               description="Add your first one and every rupee starts staying accounted for."
             />

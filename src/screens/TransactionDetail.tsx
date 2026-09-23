@@ -13,6 +13,7 @@ import { Money } from '../components/ui/Money';
 import { KIND_META } from '../lib/kinds';
 import { ErrorState } from '../components/ErrorState';
 import { EditTransaction } from '../components/EditTransaction';
+import { Receipts } from '../components/Receipts';
 
 const BUCKET_LABELS: Record<string, string> = {
   asset: 'Account',
@@ -152,6 +153,8 @@ export function TransactionDetailScreen() {
               ))}
             </List>
           </section>
+
+          <Receipts transactionId={tx.id} />
 
           {/*
             The double-entry view. Most people will never open it, and that is

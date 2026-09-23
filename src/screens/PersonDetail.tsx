@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Archive, ArrowLeft, HandCoins, Receipt, Scale } from 'lucide-react';
+import { Archive, ArrowLeft, HandCoins, MessageCircle, Receipt, Scale } from 'lucide-react';
+import { buildReminder, sendReminder } from '../lib/reminder';
 import { formatPaise } from '@shared/money';
 import type { TransactionView } from '@shared/domain';
 import { toast } from 'sonner';
@@ -146,8 +147,27 @@ export function PersonDetailScreen() {
               ? `${data.person.name} paid me back`
               : `Pay ${data.person.name} back`}
           </Button>
+          {net > 0 && (
+            <Button
+              block
+              size="lg"
+              variant="secondary"
+              className="mt-2"
+              icon={<MessageCircle className="size-[18px]" />}
+              onClick={async () => {
+                const text = buildReminder(data.person, data.transactions);
+                if (!text) return;
+                const outcome = await sendReminder(text);
+                if (outcome === 'opened') toast('Opened WhatsApp — pick who to send it to.');
+              }}
+            >
+              Remind {data.person.name.split(/\s+/)[0]}
+            </Button>
+          )}
           <p className="mt-2 text-center text-[12.5px] text-ink-muted">
-            Opens with {formatPaise(Math.abs(net))} filled in — change it for a part payment.
+            {net > 0
+              ? 'The reminder opens in WhatsApp for you to edit before it goes anywhere.'
+              : `Opens with ${formatPaise(Math.abs(net))} filled in — change it for a part payment.`}
           </p>
         </div>
       )}

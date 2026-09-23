@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Activity,
   BellRing,
+  ChartPie,
   Check,
   Download,
   Eye,
@@ -83,6 +84,13 @@ export function MoreScreen() {
             title="Accounts & pools"
             subtitle="Where your money is, and whose it is"
             onClick={() => navigate('/accounts')}
+            chevron
+          />
+          <Row
+            icon={<IconBadge tone="neutral" size="sm"><ChartPie /></IconBadge>}
+            title="Insights"
+            subtitle="Spending by category, cash vs digital"
+            onClick={() => navigate('/insights')}
             chevron
           />
           <Row

@@ -418,6 +418,8 @@ var schema = z.object({
   BETTER_AUTH_URL: optional(z.string().url().optional()),
   /** Public origin of the app, used for cookies, CORS and auth callbacks. */
   APP_URL: optional(z.string().url().default("http://localhost:5173")),
+  /** Claude, for the in-app assistant. Optional: without it the assistant says so. */
+  ANTHROPIC_API_KEY: optional(z.string().optional()),
   /** Supabase Storage — attachments and encrypted backups only. Never data. */
   SUPABASE_URL: optional(z.string().url().optional()),
   SUPABASE_SERVICE_ROLE_KEY: optional(z.string().optional()),
@@ -438,6 +440,7 @@ var isProduction = env.NODE_ENV === "production";
 var hasDatabase = Boolean(env.DATABASE_URL);
 var hasAuthSecret = Boolean(env.BETTER_AUTH_SECRET && env.BETTER_AUTH_SECRET.length >= 32);
 var hasStorage = Boolean(env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY);
+var hasAssistant = Boolean(env.ANTHROPIC_API_KEY);
 var missingEnv = [
   ...hasDatabase ? [] : ["DATABASE_URL"],
   ...hasAuthSecret ? [] : ["BETTER_AUTH_SECRET"]
@@ -643,6 +646,7 @@ var badRequest = (message, code = "bad_request", details) => new AppError(400, c
 var unauthorized = (message = "Please sign in to continue.") => new AppError(401, "unauthorized", message);
 var notFound = (what = "That") => new AppError(404, "not_found", `${what} could not be found.`);
 var conflict = (message, code = "conflict") => new AppError(409, code, message);
+var tooManyRequests = (message = "Too many attempts. Please wait a moment.") => new AppError(429, "rate_limited", message);
 var serviceUnavailable = (message, code = "service_unavailable") => new AppError(503, code, message);
 var databaseUnavailable = () => serviceUnavailable(
   "We could not reach your ledger. Your money was not changed.",
@@ -673,6 +677,36 @@ function sumPaise(values) {
     if (!Number.isSafeInteger(total)) throw new MoneyError("money overflow");
   }
   return normalizeZero(total);
+}
+function parseRupeesToPaise(input) {
+  if (input === null || input === void 0) return null;
+  const raw = String(input).trim().replace(/[₹,\s]/g, "");
+  if (raw === "" || !/^-?\d*(\.\d{0,2})?$/.test(raw)) return null;
+  if (raw === "-" || raw === "." || raw === "-.") return null;
+  const negative = raw.startsWith("-");
+  const [whole = "0", frac = ""] = raw.replace("-", "").split(".");
+  const paise2 = Number(whole || "0") * 100 + Number((frac + "00").slice(0, 2));
+  if (!Number.isSafeInteger(paise2) || paise2 > MAX_PAISE) return null;
+  return negative ? -paise2 : paise2;
+}
+function formatPaise(paise2, options = {}) {
+  const { compactPaise = true, symbol = true, signed = false } = options;
+  assertPaise(paise2);
+  const normalized = normalizeZero(paise2);
+  const sign = normalized < 0 ? "-" : signed && normalized > 0 ? "+" : "";
+  const abs = Math.abs(normalized);
+  const whole = Math.floor(abs / 100);
+  const frac = abs % 100;
+  const body = groupIndian(whole);
+  const tail = compactPaise && frac === 0 ? "" : `.${String(frac).padStart(2, "0")}`;
+  return `${sign}${symbol ? "\u20B9" : ""}${body}${tail}`;
+}
+function groupIndian(n) {
+  const s = String(Math.trunc(Math.abs(n)));
+  if (s.length <= 3) return s;
+  const last3 = s.slice(-3);
+  const rest = s.slice(0, -3).replace(/\B(?=(\d{2})+(?!\d))/g, ",");
+  return `${rest},${last3}`;
 }
 
 // server/domain/ledger.ts
@@ -1327,6 +1361,17 @@ function mirrorOf(entries) {
     }))
   });
 }
+async function previewTransaction(userId2, input, options = {}) {
+  const refs = await loadRefs(getDb(), userId2);
+  for (const id of options.extraPersonIds ?? []) refs.personIds.add(id);
+  try {
+    const entries = buildEntries(toIntent(input, refs));
+    return { amount: headlineAmount(input.kind, entries), entries };
+  } catch (error) {
+    if (error instanceof LedgerError) throw badRequest(error.message, error.code);
+    throw error;
+  }
+}
 async function createTransaction(userId2, input) {
   const db = getDb();
   if (input.idempotencyKey) {
@@ -1829,6 +1874,17 @@ async function archiveAccount(userId2, id) {
   const [row] = await db.delete(accounts).where(and3(eq3(accounts.id, id), eq3(accounts.userId, userId2))).returning();
   if (!row) throw notFound("That account");
   return row;
+}
+async function listPools(userId2) {
+  const db = getDb();
+  const rows = await db.select().from(ownershipPools).where(eq3(ownershipPools.userId, userId2)).orderBy(asc2(ownershipPools.sortOrder), asc2(ownershipPools.name));
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    kind: r.kind,
+    balance: 0,
+    isDefault: r.isDefault
+  }));
 }
 async function createPool(userId2, input) {
   const db = getDb();
@@ -2548,6 +2604,630 @@ async function importBackup(userId2, raw) {
 }
 
 // server/routes/index.ts
+import rateLimit2 from "express-rate-limit";
+
+// server/services/assistant.ts
+import { randomUUID as randomUUID2 } from "node:crypto";
+import Anthropic from "@anthropic-ai/sdk";
+import { z as z6 } from "zod";
+
+// server/domain/drafts.ts
+import { randomUUID } from "node:crypto";
+import { z as z5 } from "zod";
+var DRAFT_KINDS = [
+  "expense",
+  "income",
+  "transfer",
+  "lend",
+  "borrow",
+  "settle_receivable",
+  "settle_payable",
+  "paid_for_someone",
+  "someone_paid_for_me",
+  "refund",
+  "opening_balance"
+];
+var INCOMING_KINDS = /* @__PURE__ */ new Set(["income", "borrow", "settle_receivable", "refund", "opening_balance"]);
+var nullableId = z5.string().max(64).nullish();
+var rupees = z5.string().max(24);
+var draftInputSchema = z5.object({
+  kind: z5.enum(DRAFT_KINDS),
+  amount: rupees,
+  summary: z5.string().max(140),
+  accountId: nullableId,
+  poolId: nullableId,
+  toAccountId: nullableId,
+  toPoolId: nullableId,
+  personId: nullableId,
+  newPersonName: z5.string().max(60).nullish(),
+  categoryId: nullableId,
+  date: z5.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullish(),
+  note: z5.string().max(200).nullish(),
+  myShare: rupees.nullish(),
+  participants: z5.array(
+    z5.object({
+      personId: nullableId,
+      newPersonName: z5.string().max(60).nullish(),
+      share: rupees
+    })
+  ).max(20).nullish(),
+  withoutCashMovement: z5.boolean().nullish()
+});
+var DRAFT_JSON_SCHEMA = {
+  type: "object",
+  properties: {
+    kind: {
+      type: "string",
+      enum: [...DRAFT_KINDS],
+      description: "expense: money spent. income: money received and kept (salary, a gift, Dad giving money). transfer: moving between accounts or between whose-money pools, including into savings. lend: the user gave someone money they expect back (NOT an expense). borrow: someone gave the user money to be returned (NOT income). settle_receivable: someone repaid the user. settle_payable: the user repaid someone. paid_for_someone: the user paid a shared bill; only their own share is an expense. someone_paid_for_me: someone else paid for the user. refund: money back from a merchant. opening_balance: money the user already had before using the app."
+    },
+    amount: { type: "string", description: 'Rupees as plain digits, e.g. "150" or "150.50". No symbols.' },
+    summary: {
+      type: "string",
+      description: `One short line the user will read on the confirmation card, e.g. "Lunch at Tanay's, \u20B9240".`
+    },
+    accountId: { type: ["string", "null"], description: "Account the money LEAVES. Null for the default." },
+    poolId: { type: ["string", "null"], description: "Whose money leaves. Null for the default (My money)." },
+    toAccountId: { type: ["string", "null"], description: "Account the money ARRIVES in (income, transfer, repayments)." },
+    toPoolId: { type: ["string", "null"], description: "Whose money it becomes when it arrives." },
+    personId: { type: ["string", "null"], description: "Existing person id for debts and repayments." },
+    newPersonName: {
+      type: ["string", "null"],
+      description: "Only when the person is NOT in the list yet. They are created when the user confirms."
+    },
+    categoryId: { type: ["string", "null"], description: "Existing category id, if one fits." },
+    date: { type: ["string", "null"], description: "YYYY-MM-DD. Null for today. Never in the future." },
+    note: { type: ["string", "null"] },
+    myShare: {
+      type: ["string", "null"],
+      description: "paid_for_someone only: the user's own share in rupees. Shares must add up to amount exactly."
+    },
+    participants: {
+      type: ["array", "null"],
+      description: "paid_for_someone only: everyone else on the bill and what they owe.",
+      items: {
+        type: "object",
+        properties: {
+          personId: { type: ["string", "null"] },
+          newPersonName: { type: ["string", "null"] },
+          share: { type: "string", description: "Rupees." }
+        },
+        required: ["share"]
+      }
+    },
+    withoutCashMovement: {
+      type: ["boolean", "null"],
+      description: "lend/borrow only. True when recording a debt that ALREADY existed and no cash moves now."
+    }
+  },
+  required: ["kind", "amount", "summary"]
+};
+var DraftError = class extends Error {
+};
+function paiseOf(text2, label) {
+  const paise2 = parseRupeesToPaise(text2 ?? null);
+  if (paise2 === null) throw new DraftError(`${label} "${text2 ?? ""}" is not an amount in rupees.`);
+  return paise2;
+}
+function offsetSuffix(minutes) {
+  const sign = minutes >= 0 ? "+" : "-";
+  const abs = Math.abs(minutes);
+  return `${sign}${String(Math.floor(abs / 60)).padStart(2, "0")}:${String(abs % 60).padStart(2, "0")}`;
+}
+function convertDraft(raw, context) {
+  const parsed2 = draftInputSchema.safeParse(raw);
+  if (!parsed2.success) {
+    throw new DraftError(
+      `The draft is malformed: ${parsed2.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`
+    );
+  }
+  const draft = parsed2.data;
+  const newPeople = {};
+  const resolvePerson = (personId2, newName) => {
+    if (personId2) return personId2;
+    const name2 = newName?.trim();
+    if (!name2) return null;
+    const existing = context.people.find((p) => p.name.toLowerCase() === name2.toLowerCase());
+    if (existing) return existing.id;
+    const already = Object.entries(newPeople).find(([, n]) => n.toLowerCase() === name2.toLowerCase());
+    if (already) return already[0];
+    const placeholder = randomUUID();
+    newPeople[placeholder] = name2;
+    return placeholder;
+  };
+  const amount = paiseOf(draft.amount, "The amount");
+  if (amount <= 0) throw new DraftError("The amount must be more than zero.");
+  const now = context.now ?? /* @__PURE__ */ new Date();
+  let occurredAt2;
+  if (!draft.date || draft.date === context.today) {
+    occurredAt2 = now.toISOString();
+  } else {
+    if (draft.date > context.today) throw new DraftError("That date is in the future.");
+    occurredAt2 = (/* @__PURE__ */ new Date(`${draft.date}T12:00:00${offsetSuffix(context.timeZoneOffsetMinutes)}`)).toISOString();
+  }
+  const incoming = INCOMING_KINDS.has(draft.kind);
+  const toAccountId = draft.toAccountId ?? (incoming ? draft.accountId : null) ?? null;
+  const toPoolId = draft.toPoolId ?? (incoming ? draft.poolId : null) ?? null;
+  const payload = {
+    kind: draft.kind,
+    amount,
+    occurredAt: occurredAt2,
+    note: draft.note?.trim() || null,
+    accountId: incoming ? null : draft.accountId ?? null,
+    poolId: incoming ? null : draft.poolId ?? null,
+    toAccountId,
+    toPoolId,
+    categoryId: draft.categoryId ?? null
+  };
+  const personId = resolvePerson(draft.personId, draft.newPersonName);
+  if (personId) payload.personId = personId;
+  if (draft.kind === "lend" || draft.kind === "borrow") {
+    payload.withoutCashMovement = Boolean(draft.withoutCashMovement);
+  }
+  if (draft.kind === "paid_for_someone") {
+    const participants = (draft.participants ?? []).map((p, i) => {
+      const id = resolvePerson(p.personId, p.newPersonName);
+      if (!id) throw new DraftError(`Person ${i + 1} on the bill has no id and no name.`);
+      return { personId: id, shareAmount: paiseOf(p.share, `Share ${i + 1}`) };
+    });
+    if (participants.length === 0) throw new DraftError("A shared bill needs at least one other person.");
+    const named = participants.reduce((sum, p) => sum + p.shareAmount, 0);
+    const myShare = draft.myShare != null ? paiseOf(draft.myShare, "Your share") : amount - named;
+    if (myShare < 0 || myShare + named !== amount) {
+      throw new DraftError(
+        `The shares (${formatPaise(named)} for others + ${formatPaise(Math.max(myShare, 0))} yours) do not add up to ${formatPaise(amount)}.`
+      );
+    }
+    payload.myShare = myShare;
+    payload.participants = participants;
+  }
+  const validated = createTransactionSchema.safeParse(payload);
+  if (!validated.success) {
+    throw new DraftError(validated.error.issues.map((i) => i.message).join("; "));
+  }
+  return { payload, input: validated.data, newPeople, summary: draft.summary.trim() };
+}
+
+// server/services/assistant.ts
+var ASSISTANT_MODEL = "claude-opus-5";
+var MAX_TOOL_ROUNDS = 6;
+var client = null;
+function getClient() {
+  if (client) return client;
+  if (!hasAssistant) {
+    throw serviceUnavailable(
+      "The assistant is not set up yet. Add ANTHROPIC_API_KEY to the deployment to turn it on.",
+      "assistant_unavailable"
+    );
+  }
+  client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+  return client;
+}
+var IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
+var assistantRequestSchema = z6.object({
+  messages: z6.array(
+    z6.object({
+      role: z6.enum(["user", "assistant"]),
+      text: z6.string().max(4e3),
+      image: z6.object({
+        mediaType: z6.enum(IMAGE_TYPES),
+        // ~3 MB of image once decoded; the client downsizes well below this.
+        data: z6.string().max(42e5)
+      }).nullish()
+    })
+  ).min(1).max(40),
+  today: z6.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  timeZoneOffsetMinutes: z6.number().int().min(-720).max(840)
+});
+var SYSTEM_PROMPT = `You are Chillar, the assistant inside Ledger \u2014 a private money app for one person in India. You help them record what happened with their money and check that their books are right. Be warm, brief and plain-spoken; this is a phone screen.
+
+How the ledger works
+- Amounts are rupees. Money sits in ACCOUNTS (where: cash, bank, UPI, savings) and belongs to POOLS (whose: "My money", "Dad money"\u2026). The same cash can be partly Dad's.
+- Lending is not an expense and borrowing is not income. Repayments are settlements, not income or spending. Moving money between accounts or pools, including into savings, is a transfer. Paying a shared bill: only the user's own share is an expense; everyone else's share becomes money they owe.
+
+Recording transactions
+- You cannot save anything. To record, call propose_transactions. Each draft is checked by the ledger and shown to the user as a card they confirm. Never say something was saved or recorded \u2014 say you have drafted it for them to confirm.
+- Use the ids from the ledger snapshot. If a person is not in the list, set newPersonName instead of inventing an id.
+- If something that matters is genuinely ambiguous \u2014 who paid, how a bill was split, whether money was a gift or a loan \u2014 ask one short question instead of guessing. Do not ask about things with a sensible default (account defaults to Cash, pool to My money, date to today).
+- If a draft is rejected, read the reason, fix it, and propose only the corrected draft again. Drafts already accepted are already on the user's screen.
+- For a receipt photo, read the total and what it was for, then propose it; mention anything you could not read.
+
+Checking the books
+- To verify, use check_ledger and search_transactions. Look for things a person would care about: likely duplicates (same amount, same day, same description), debts that look forgotten, or an account that seems off. Report what you actually found. If everything checks out, say so plainly.
+
+Privacy
+- Accounts marked private are hidden from the user's total so that other people glancing at the phone do not see them. Never state, estimate or hint at a private account's balance, and never add it to totals you mention. You may still record transactions into a private account when asked.`;
+var TOOLS = [
+  {
+    name: "propose_transactions",
+    description: "Draft one or more transactions for the user to confirm. Nothing is saved until they confirm each card. Returns which drafts were accepted by the ledger and, for any that were not, exactly why.",
+    input_schema: {
+      type: "object",
+      properties: {
+        drafts: { type: "array", items: DRAFT_JSON_SCHEMA, minItems: 1, maxItems: 12 }
+      },
+      required: ["drafts"]
+    }
+  },
+  {
+    name: "search_transactions",
+    description: "Search the user's recorded transactions, newest first. Use it to answer questions about history and to look for duplicates or mistakes.",
+    input_schema: {
+      type: "object",
+      properties: {
+        search: { type: "string", description: "Matches notes, people and categories." },
+        personId: { type: "string" },
+        accountId: { type: "string" },
+        from: { type: "string", description: "YYYY-MM-DD, inclusive." },
+        to: { type: "string", description: "YYYY-MM-DD, inclusive." },
+        limit: { type: "integer", minimum: 1, maximum: 50 }
+      }
+    }
+  },
+  {
+    name: "check_ledger",
+    description: "Run the ledger's integrity checks: every transaction balances, no orphaned or broken entries, debts and accounts consistent. Returns each check and what it found.",
+    input_schema: { type: "object", properties: {} }
+  }
+];
+async function buildSnapshot(userId2) {
+  const [dashboard, people2, categories2, pools] = await Promise.all([
+    getDashboard(userId2),
+    getPeopleBalances(userId2),
+    listCategories(userId2),
+    listPools(userId2)
+  ]);
+  const accounts2 = dashboard.accounts.filter((a) => !a.archivedAt).map(
+    (a) => a.isPrivate ? { id: a.id, name: a.name, kind: a.kind, private: true } : { id: a.id, name: a.name, kind: a.kind, balance: formatPaise(a.balance), default: a.isDefault || void 0 }
+  );
+  const snapshot = {
+    totals: {
+      totalMoneyShown: formatPaise(dashboard.ownedMoney),
+      othersOweMe: formatPaise(dashboard.owedToMe),
+      iOweOthers: formatPaise(dashboard.iOwe)
+    },
+    accounts: accounts2,
+    pools: pools.map((p) => ({ id: p.id, name: p.name, kind: p.kind, default: p.isDefault || void 0 })),
+    people: people2.map((p) => ({
+      id: p.id,
+      name: p.name,
+      position: p.netBalance > 0 ? `owes the user ${formatPaise(p.netBalance)}` : p.netBalance < 0 ? `the user owes ${formatPaise(-p.netBalance)}` : "settled"
+    })),
+    categories: categories2.map((c) => ({ id: c.id, name: c.name, for: c.direction }))
+  };
+  return {
+    text: `Current ledger (live, for reference \u2014 use these ids):
+${JSON.stringify(snapshot)}`,
+    people: people2.map((p) => ({ id: p.id, name: p.name }))
+  };
+}
+async function runAssistant(userId2, request) {
+  const anthropic = getClient();
+  const snapshot = await buildSnapshot(userId2);
+  const history = request.messages;
+  const last = history[history.length - 1];
+  if (!last || last.role !== "user") throw badRequest("The last message must be from you.");
+  const messages = history.slice(0, -1).map((m) => ({
+    role: m.role,
+    content: m.text || "\u2026"
+  }));
+  const latest = [];
+  if (last.image) {
+    latest.push({
+      type: "image",
+      source: { type: "base64", media_type: last.image.mediaType, data: last.image.data }
+    });
+  }
+  latest.push({ type: "text", text: `${snapshot.text}
+
+Today is ${request.today}.` });
+  latest.push({ type: "text", text: last.text || (last.image ? "Here is a receipt." : "\u2026") });
+  messages.push({ role: "user", content: latest });
+  const drafts = [];
+  const spoken = [];
+  let truncated = false;
+  for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+    let response;
+    try {
+      response = await anthropic.beta.messages.create({
+        model: ASSISTANT_MODEL,
+        max_tokens: 16e3,
+        // If a safety classifier declines, the API re-runs the request on a
+        // recommended fallback model instead of returning a refusal.
+        betas: ["server-side-fallback-2026-07-01"],
+        fallbacks: "default",
+        thinking: { type: "adaptive" },
+        // Conversational and latency-sensitive: medium keeps replies quick
+        // without losing the judgement the accounting rules need.
+        output_config: { effort: "medium" },
+        system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
+        tools: TOOLS,
+        messages
+      });
+    } catch (error) {
+      throw toAppError(error);
+    }
+    for (const block of response.content) {
+      if (block.type === "text" && block.text.trim()) spoken.push(block.text.trim());
+    }
+    if (response.stop_reason === "refusal") {
+      return {
+        reply: "I can\u2019t help with that one. I\u2019m happy to record transactions or check your books.",
+        drafts,
+        truncated: false
+      };
+    }
+    if (response.stop_reason === "max_tokens") {
+      truncated = true;
+      break;
+    }
+    messages.push({ role: "assistant", content: response.content });
+    if (response.stop_reason === "pause_turn") continue;
+    if (response.stop_reason !== "tool_use") break;
+    const calls = response.content.filter(
+      (b) => b.type === "tool_use"
+    );
+    const results = await Promise.all(
+      calls.map(async (call) => {
+        try {
+          const output = await runTool(userId2, call, request, snapshot.people, drafts);
+          return { type: "tool_result", tool_use_id: call.id, content: output };
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "That tool failed.";
+          return { type: "tool_result", tool_use_id: call.id, content: message, is_error: true };
+        }
+      })
+    );
+    messages.push({ role: "user", content: results });
+    if (round === MAX_TOOL_ROUNDS - 1) truncated = true;
+  }
+  const reply = spoken.length > 0 ? spoken[spoken.length - 1] : drafts.length > 0 ? `I\u2019ve drafted ${drafts.length === 1 ? "this" : "these"} for you to confirm.` : "I\u2019m not sure what to do with that. Could you tell me a little more?";
+  return { reply, drafts, truncated };
+}
+async function runTool(userId2, call, request, people2, drafts) {
+  const input = call.input ?? {};
+  switch (call.name) {
+    case "propose_transactions": {
+      const raw = Array.isArray(input.drafts) ? input.drafts : [];
+      if (raw.length === 0) return "No drafts were given.";
+      const accepted = [];
+      const rejected = [];
+      for (const [index2, candidate] of raw.entries()) {
+        try {
+          const converted = convertDraft(candidate, {
+            people: people2,
+            today: request.today,
+            timeZoneOffsetMinutes: request.timeZoneOffsetMinutes
+          });
+          const preview = await previewTransaction(userId2, converted.input, {
+            extraPersonIds: Object.keys(converted.newPeople)
+          });
+          drafts.push({
+            id: randomUUID2(),
+            summary: converted.summary,
+            kind: converted.input.kind,
+            amount: preview.amount,
+            payload: converted.payload,
+            newPeople: converted.newPeople
+          });
+          accepted.push({ index: index2, summary: converted.summary });
+        } catch (error) {
+          const reason = error instanceof DraftError || error instanceof AppError ? error.message : "The ledger could not check this draft.";
+          rejected.push({ index: index2, reason });
+        }
+      }
+      return JSON.stringify({
+        accepted,
+        rejected,
+        note: "Accepted drafts are now shown to the user as cards to confirm. Nothing has been saved."
+      });
+    }
+    case "search_transactions": {
+      const limit = typeof input.limit === "number" ? Math.min(Math.max(input.limit, 1), 50) : 20;
+      const day = (value, end) => typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? (/* @__PURE__ */ new Date(`${value}T${end ? "23:59:59" : "00:00:00"}Z`)).toISOString() : void 0;
+      const { items } = await listTransactions(userId2, {
+        limit,
+        search: typeof input.search === "string" ? input.search.slice(0, 100) : void 0,
+        personId: typeof input.personId === "string" ? input.personId : void 0,
+        accountId: typeof input.accountId === "string" ? input.accountId : void 0,
+        from: day(input.from, false),
+        to: day(input.to, true)
+      });
+      return JSON.stringify(
+        items.map((t) => ({
+          id: t.id,
+          date: t.occurredAt.slice(0, 10),
+          kind: t.kind,
+          amount: formatPaise(t.amount),
+          note: t.note,
+          account: t.labels.account,
+          toAccount: t.labels.toAccount,
+          category: t.labels.category,
+          people: t.labels.people.map((p) => p.name),
+          reversed: Boolean(t.reversedByTransactionId) || void 0
+        }))
+      );
+    }
+    case "check_ledger": {
+      const report = await getLedgerHealth(userId2);
+      return JSON.stringify({
+        healthy: report.healthy,
+        transactions: report.totals.transactions,
+        checks: report.checks.map((c) => ({ check: c.label, ok: c.status === "pass", detail: c.detail || void 0 }))
+      });
+    }
+    default:
+      return `There is no tool called ${call.name}.`;
+  }
+}
+function toAppError(error) {
+  if (error instanceof Anthropic.AuthenticationError || error instanceof Anthropic.PermissionDeniedError) {
+    return serviceUnavailable("The assistant\u2019s API key was rejected. Check ANTHROPIC_API_KEY.", "assistant_misconfigured");
+  }
+  if (error instanceof Anthropic.RateLimitError) {
+    return tooManyRequests("The assistant is getting a lot of requests. Try again in a minute.");
+  }
+  if (error instanceof Anthropic.BadRequestError) {
+    console.error("[assistant] request rejected", error.message);
+    return serviceUnavailable("The assistant could not handle that request. Nothing was changed.", "assistant_failed");
+  }
+  if (error instanceof Anthropic.APIConnectionError) {
+    return serviceUnavailable("Could not reach the assistant. Nothing was changed.", "assistant_failed");
+  }
+  if (error instanceof Anthropic.APIError) {
+    return serviceUnavailable("The assistant is unavailable right now. Nothing was changed.", "assistant_failed");
+  }
+  return error instanceof Error ? error : new Error(String(error));
+}
+
+// server/services/attachments.ts
+import { and as and8, asc as asc4, eq as eq9 } from "drizzle-orm";
+import { z as z7 } from "zod";
+
+// server/services/storage.ts
+import { createClient } from "@supabase/supabase-js";
+var SupabaseBackend = class {
+  client;
+  bucket;
+  constructor() {
+    this.client = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false }
+    });
+    this.bucket = env.SUPABASE_STORAGE_BUCKET;
+  }
+  async upload(path, body, contentType) {
+    const { error } = await this.client.storage.from(this.bucket).upload(path, body, { contentType, upsert: false });
+    if (error) {
+      console.error("[storage] upload failed", error.message);
+      throw serviceUnavailable("We could not store that file. Nothing was changed.", "storage_upload_failed");
+    }
+  }
+  async signedUrl(path, expiresInSeconds) {
+    const { data, error } = await this.client.storage.from(this.bucket).createSignedUrl(path, expiresInSeconds);
+    if (error || !data) throw serviceUnavailable("We could not open that file.", "storage_signing_failed");
+    return data.signedUrl;
+  }
+  async remove(path) {
+    const { error } = await this.client.storage.from(this.bucket).remove([path]);
+    if (error) console.warn("[storage] could not delete object", path, error.message);
+  }
+};
+var backend = null;
+function getStorage() {
+  if (backend) return backend;
+  if (!hasStorage) {
+    throw serviceUnavailable(
+      "Receipt storage is not set up yet. Add the Supabase settings to the deployment to turn it on.",
+      "storage_unavailable"
+    );
+  }
+  backend = new SupabaseBackend();
+  return backend;
+}
+var RECEIPT_TYPES = /* @__PURE__ */ new Set(["image/jpeg", "image/png", "image/webp", "image/heic", "application/pdf"]);
+var MAX_RECEIPT_BYTES = 3 * 1024 * 1024;
+function objectPath(userId2, kind, fileName) {
+  const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80) || "file";
+  return `${userId2}/${kind}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safeName}`;
+}
+function assertOwnedPath(userId2, path) {
+  if (!path.startsWith(`${userId2}/`)) throw badRequest("That file is not yours.", "forbidden_path");
+}
+
+// server/services/attachments.ts
+var uploadAttachmentSchema = z7.object({
+  fileName: z7.string().min(1).max(120),
+  contentType: z7.string().max(60),
+  /** Base64, no data: prefix. */
+  data: z7.string().min(1).max(44e5)
+});
+var URL_LIFETIME_SECONDS = 10 * 60;
+async function requireOwnedTransaction(userId2, transactionId) {
+  const [row] = await getDb().select({ id: transactions.id }).from(transactions).where(and8(eq9(transactions.id, transactionId), eq9(transactions.userId, userId2)));
+  if (!row) throw notFound("That transaction");
+}
+async function addAttachment(userId2, transactionId, input) {
+  await requireOwnedTransaction(userId2, transactionId);
+  if (!RECEIPT_TYPES.has(input.contentType)) {
+    throw badRequest("Receipts can be JPEG, PNG, WebP, HEIC or PDF.", "unsupported_file_type");
+  }
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(input.data)) {
+    throw badRequest("That file could not be read.", "invalid_file");
+  }
+  const body = Buffer.from(input.data, "base64");
+  if (body.byteLength === 0) throw badRequest("That file is empty.", "invalid_file");
+  if (body.byteLength > MAX_RECEIPT_BYTES) throw badRequest("That file is larger than 3 MB.", "file_too_large");
+  const storage = getStorage();
+  const path = objectPath(userId2, "receipt", input.fileName);
+  await storage.upload(path, body, input.contentType);
+  let row;
+  try {
+    [row] = await getDb().insert(attachments).values({
+      userId: userId2,
+      transactionId,
+      storagePath: path,
+      fileName: input.fileName,
+      contentType: input.contentType,
+      byteSize: body.byteLength,
+      kind: "receipt"
+    }).returning();
+  } catch (error) {
+    await storage.remove(path);
+    throw error;
+  }
+  if (!row) throw new Error("attachment insert returned no row");
+  await getDb().insert(auditLogs).values({
+    userId: userId2,
+    action: "attachment.add",
+    entityType: "transaction",
+    entityId: transactionId,
+    metadata: { attachmentId: row.id, byteSize: body.byteLength }
+  });
+  return {
+    id: row.id,
+    transactionId,
+    fileName: row.fileName,
+    contentType: row.contentType,
+    byteSize: row.byteSize,
+    createdAt: row.createdAt.toISOString(),
+    url: await storage.signedUrl(path, URL_LIFETIME_SECONDS)
+  };
+}
+async function listAttachments(userId2, transactionId) {
+  await requireOwnedTransaction(userId2, transactionId);
+  const rows = await getDb().select().from(attachments).where(and8(eq9(attachments.userId, userId2), eq9(attachments.transactionId, transactionId))).orderBy(asc4(attachments.createdAt));
+  if (rows.length === 0) return [];
+  const storage = getStorage();
+  return Promise.all(
+    rows.map(async (row) => {
+      assertOwnedPath(userId2, row.storagePath);
+      return {
+        id: row.id,
+        transactionId,
+        fileName: row.fileName,
+        contentType: row.contentType,
+        byteSize: row.byteSize,
+        createdAt: row.createdAt.toISOString(),
+        url: await storage.signedUrl(row.storagePath, URL_LIFETIME_SECONDS)
+      };
+    })
+  );
+}
+async function removeAttachment(userId2, attachmentId) {
+  const [row] = await getDb().delete(attachments).where(and8(eq9(attachments.id, attachmentId), eq9(attachments.userId, userId2))).returning();
+  if (!row) throw notFound("That receipt");
+  assertOwnedPath(userId2, row.storagePath);
+  await getStorage().remove(row.storagePath);
+  await getDb().insert(auditLogs).values({
+    userId: userId2,
+    action: "attachment.remove",
+    entityType: "transaction",
+    entityId: row.transactionId,
+    metadata: { attachmentId }
+  });
+}
+
+// server/routes/index.ts
 function createApiRouter() {
   const api = Router();
   api.get("/status", (_req, res) => {
@@ -2555,6 +3235,7 @@ function createApiRouter() {
       ok: isConfigured,
       database: hasDatabase ? "configured" : "not_configured",
       storage: hasStorage ? "configured" : "not_configured",
+      assistant: hasAssistant ? "configured" : "not_configured",
       ...isConfigured ? {} : { missing: missingEnv, invalid: invalidEnv },
       time: (/* @__PURE__ */ new Date()).toISOString()
     });
@@ -2610,6 +3291,61 @@ function createApiRouter() {
     validate(createTransactionSchema),
     handler(async (req, res) => {
       res.json(await replaceTransaction(userIdOf(req), req.params.id, req.body));
+    })
+  );
+  api.get(
+    "/transactions/:id/attachments",
+    handler(async (req, res) => {
+      res.json(await listAttachments(userIdOf(req), req.params.id));
+    })
+  );
+  api.post(
+    "/transactions/:id/attachments",
+    writeLimiter,
+    validate(uploadAttachmentSchema),
+    handler(async (req, res) => {
+      res.status(201).json(await addAttachment(userIdOf(req), req.params.id, req.body));
+    })
+  );
+  api.delete(
+    "/attachments/:id",
+    writeLimiter,
+    handler(async (req, res) => {
+      await removeAttachment(userIdOf(req), req.params.id);
+      res.status(204).end();
+    })
+  );
+  const assistantLimiter = rateLimit2({
+    windowMs: 5 * 60 * 1e3,
+    max: 30,
+    keyGenerator: (req) => req.userId ?? "anonymous",
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: (_req, res) => {
+      res.status(429).json({
+        error: { code: "rate_limited", message: "That is a lot of questions at once. Give it a minute." }
+      });
+    }
+  });
+  const assistantDailyLimiter = rateLimit2({
+    windowMs: 24 * 60 * 60 * 1e3,
+    max: 300,
+    keyGenerator: (req) => req.userId ?? "anonymous",
+    standardHeaders: false,
+    legacyHeaders: false,
+    handler: (_req, res) => {
+      res.status(429).json({
+        error: { code: "rate_limited", message: "The assistant has reached today's limit. It resets tomorrow." }
+      });
+    }
+  });
+  api.post(
+    "/assistant",
+    assistantLimiter,
+    assistantDailyLimiter,
+    validate(assistantRequestSchema),
+    handler(async (req, res) => {
+      res.json(await runAssistant(userIdOf(req), req.body));
     })
   );
   api.get(

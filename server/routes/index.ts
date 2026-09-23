@@ -46,7 +46,15 @@ import { getLedgerHealth } from '../services/health';
 import { getInsights, type InsightRange } from '../services/insights';
 import { exportBackup, toCsv, validateBackup, importBackup } from '../services/backup';
 import { notFound } from '../http/errors';
-import { hasDatabase, hasStorage, isConfigured, missingEnv, invalidEnv } from '../env';
+import { hasDatabase, hasStorage, hasAssistant, isConfigured, missingEnv, invalidEnv } from '../env';
+import rateLimit from 'express-rate-limit';
+import { runAssistant, assistantRequestSchema } from '../services/assistant';
+import {
+  addAttachment,
+  listAttachments,
+  removeAttachment,
+  uploadAttachmentSchema,
+} from '../services/attachments';
 
 export function createApiRouter(): Router {
   const api = Router();
@@ -65,6 +73,7 @@ export function createApiRouter(): Router {
       ok: isConfigured,
       database: hasDatabase ? 'configured' : 'not_configured',
       storage: hasStorage ? 'configured' : 'not_configured',
+      assistant: hasAssistant ? 'configured' : 'not_configured',
       ...(isConfigured ? {} : { missing: missingEnv, invalid: invalidEnv }),
       time: new Date().toISOString(),
     });
@@ -141,6 +150,76 @@ export function createApiRouter(): Router {
     validate(createTransactionSchema),
     handler(async (req, res) => {
       res.json(await replaceTransaction(userIdOf(req), req.params.id as string, req.body));
+    }),
+  );
+
+  /* --------------------------- receipts ------------------------------ */
+
+  api.get(
+    '/transactions/:id/attachments',
+    handler(async (req, res) => {
+      res.json(await listAttachments(userIdOf(req), req.params.id as string));
+    }),
+  );
+
+  api.post(
+    '/transactions/:id/attachments',
+    writeLimiter,
+    validate(uploadAttachmentSchema),
+    handler(async (req, res) => {
+      res.status(201).json(await addAttachment(userIdOf(req), req.params.id as string, req.body));
+    }),
+  );
+
+  api.delete(
+    '/attachments/:id',
+    writeLimiter,
+    handler(async (req, res) => {
+      await removeAttachment(userIdOf(req), req.params.id as string);
+      res.status(204).end();
+    }),
+  );
+
+  /* ---------------------------- assistant ---------------------------- */
+
+  /*
+   * Every call spends money on the model, so it is limited per person, not
+   * per IP: a shared network should not starve anyone, and one account
+   * should not be able to run up a bill.
+   */
+  const assistantLimiter = rateLimit({
+    windowMs: 5 * 60 * 1000,
+    max: 30,
+    keyGenerator: (req) => req.userId ?? 'anonymous',
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: (_req, res) => {
+      res.status(429).json({
+        error: { code: 'rate_limited', message: 'That is a lot of questions at once. Give it a minute.' },
+      });
+    },
+  });
+
+  const assistantDailyLimiter = rateLimit({
+    windowMs: 24 * 60 * 60 * 1000,
+    max: 300,
+    keyGenerator: (req) => req.userId ?? 'anonymous',
+    standardHeaders: false,
+    legacyHeaders: false,
+    handler: (_req, res) => {
+      res.status(429).json({
+        error: { code: 'rate_limited', message: 'The assistant has reached today\'s limit. It resets tomorrow.' },
+      });
+    },
+  });
+
+  api.post(
+    '/assistant',
+    assistantLimiter,
+    assistantDailyLimiter,
+    validate(assistantRequestSchema),
+    handler(async (req, res) => {
+      res.json(await runAssistant(userIdOf(req), req.body));
     }),
   );
 

@@ -45,6 +45,9 @@ const schema = z.object({
   /** Public origin of the app, used for cookies, CORS and auth callbacks. */
   APP_URL: optional(z.string().url().default('http://localhost:5173')),
 
+  /** Claude, for the in-app assistant. Optional: without it the assistant says so. */
+  ANTHROPIC_API_KEY: optional(z.string().optional()),
+
   /** Supabase Storage — attachments and encrypted backups only. Never data. */
   SUPABASE_URL: optional(z.string().url().optional()),
   SUPABASE_SERVICE_ROLE_KEY: optional(z.string().optional()),
@@ -94,6 +97,8 @@ export const hasDatabase = Boolean(env.DATABASE_URL);
 export const hasAuthSecret = Boolean(env.BETTER_AUTH_SECRET && env.BETTER_AUTH_SECRET.length >= 32);
 
 export const hasStorage = Boolean(env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY);
+
+export const hasAssistant = Boolean(env.ANTHROPIC_API_KEY);
 
 /** What a production deployment cannot run without. */
 export const missingEnv: string[] = [
