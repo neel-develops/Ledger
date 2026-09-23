@@ -134,3 +134,25 @@ export const SAVINGS_ACTION = {
   icon: <PiggyBank />,
   tone: 'accent' as Tone,
 };
+
+/**
+ * A hue per kind, for the neon surfaces: tinted icons in light mode, glowing
+ * ones in dark. Separate from `tone`, which stays the quiet direction signal.
+ */
+export const KIND_HUES: Record<TransactionKind, string> = {
+  expense: '#ff5d73',
+  income: '#34d399',
+  transfer: '#5b8cff',
+  lend: '#ffb547',
+  borrow: '#ff7ad9',
+  settle_receivable: '#2fd3e0',
+  settle_payable: '#a3a8ff',
+  paid_for_someone: '#ff8c42',
+  someone_paid_for_me: '#7ee07e',
+  refund: '#34d399',
+  reversal: '#8e8e98',
+  adjustment: '#8e8e98',
+  opening_balance: '#b06bff',
+};
+
+export const SAVINGS_HUE = '#b06bff';

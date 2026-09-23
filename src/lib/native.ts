@@ -1,5 +1,7 @@
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
 import type { DashboardView } from '@shared/domain';
 
 /**
@@ -129,4 +131,68 @@ export async function cancelReminder(): Promise<void> {
   } catch {
     /* nothing scheduled */
   }
+}
+
+/* ------------------------------------------------------------------ *
+ * Sharing a picture
+ * ------------------------------------------------------------------ */
+
+function toBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '');
+    reader.onerror = () => reject(reader.error ?? new Error('read failed'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+const isCancel = (error: unknown) =>
+  (error instanceof DOMException && error.name === 'AbortError') ||
+  (error instanceof Error && /cancel/i.test(error.message));
+
+/**
+ * Hand an image (with a message) to the phone's share sheet, so the user picks
+ * WhatsApp and the contact. Nothing is sent by the app itself.
+ *
+ * - In the Android app: written to the app's cache, then shared natively.
+ * - In a browser that can share files: the Web Share sheet.
+ * - Anywhere else: downloaded, for the user to attach themselves.
+ */
+export async function shareImage(
+  blob: Blob,
+  fileName: string,
+  text: string,
+): Promise<'shared' | 'downloaded' | 'cancelled'> {
+  if (isNative()) {
+    try {
+      const { uri } = await Filesystem.writeFile({
+        path: fileName,
+        data: await toBase64(blob),
+        directory: Directory.Cache,
+      });
+      await Share.share({ text, files: [uri], dialogTitle: 'Send the bill' });
+      return 'shared';
+    } catch (error) {
+      if (isCancel(error)) return 'cancelled';
+      console.warn('[native] share failed, saving instead', error);
+    }
+  }
+
+  const file = new File([blob], fileName, { type: blob.type || 'image/png' });
+  if (typeof navigator !== 'undefined' && navigator.canShare?.({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], text });
+      return 'shared';
+    } catch (error) {
+      if (isCancel(error)) return 'cancelled';
+    }
+  }
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  return 'downloaded';
 }

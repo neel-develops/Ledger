@@ -24,7 +24,7 @@ import { AmountPad } from './AmountPad';
 import { Avatar, IconBadge, TextInput, Segmented } from './ui/primitives';
 import { SplitEditor, DateField, type SplitRow } from './SplitEditor';
 import { computeSplit } from '../lib/split';
-import { KIND_META, SAVINGS_ACTION } from '../lib/kinds';
+import { KIND_HUES, KIND_META, SAVINGS_ACTION, SAVINGS_HUE } from '../lib/kinds';
 import { useLedger, useDefaults } from '../store/ledger';
 import { usePrefs } from '../store/prefs';
 import { ApiError } from '../lib/api';
@@ -50,18 +50,7 @@ type Step = 'pick' | 'entry';
  * A hue per action, so the list reads as a spectrum rather than eight grey
  * cards. In dark mode each tile glows in its own colour.
  */
-const ACTION_HUES: Record<string, string> = {
-  expense: '#ff5d73',
-  income: '#34d399',
-  transfer: '#5b8cff',
-  savings: '#b06bff',
-  lend: '#ffb547',
-  borrow: '#ff7ad9',
-  settle_receivable: '#2fd3e0',
-  settle_payable: '#a3a8ff',
-  paid_for_someone: '#ff8c42',
-  someone_paid_for_me: '#7ee07e',
-};
+const ACTION_HUES: Record<string, string> = { ...KIND_HUES, savings: SAVINGS_HUE };
 
 /** The seven things the quick-action sheet offers, in designed order. */
 const QUICK_ACTIONS: { id: string; kind: TransactionKind; savings?: boolean }[] = [

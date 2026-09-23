@@ -556,6 +556,77 @@
 }
 
 /* ------------------------------------------------------------------ *
+ * Neon bits shared by the lists: Activity, People, a person's history.
+ * Each carries its hue in --tone.
+ * ------------------------------------------------------------------ */
+
+/* A transaction's icon: tinted in light mode, lit from within in dark. */
+.tone-icon {
+  color: var(--tone);
+  background: color-mix(in oklab, var(--tone) 14%, transparent);
+}
+:root[data-theme='dark'] .tone-icon {
+  background: color-mix(in oklab, var(--tone) 20%, #111218);
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--tone) 40%, transparent),
+    0 0 16px -3px color-mix(in oklab, var(--tone) 70%, transparent);
+}
+:root[data-theme='dark'] .glow-positive {
+  text-shadow: 0 0 14px color-mix(in oklab, var(--color-positive) 55%, transparent);
+}
+
+/* Activity's filter chips: quiet until chosen, then filled and glowing. */
+.filter-chip {
+  color: var(--color-ink-soft);
+  background: var(--tile-bg);
+  border: 1px solid var(--tile-border);
+  transition:
+    background-color 180ms ease-out,
+    color 180ms ease-out,
+    box-shadow 220ms ease-out,
+    transform 140ms var(--ease-out-strong);
+}
+.filter-chip:active {
+  transform: scale(0.95);
+}
+.filter-chip.is-on {
+  color: #ffffff;
+  background: var(--tone);
+  border-color: transparent;
+  box-shadow: 0 6px 18px -8px var(--tone);
+}
+:root[data-theme='dark'] .filter-chip.is-on {
+  color: #0b0c10;
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--tone) 60%, white 10%),
+    0 0 24px -4px var(--tone);
+}
+
+/* A person's avatar sits in a ring of their colour; in dark mode it turns. */
+.person-ring {
+  background: conic-gradient(from var(--hero-angle), var(--tone), color-mix(in oklab, var(--tone) 25%, transparent), var(--tone));
+}
+:root[data-theme='dark'] .person-ring {
+  animation: hero-spin 5s linear infinite;
+  box-shadow: 0 0 18px -4px var(--tone);
+}
+
+/* Day headings get a little glowing dot. */
+.day-label::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 8px;
+  border-radius: 9999px;
+  vertical-align: 2px;
+  background: var(--color-accent);
+}
+:root[data-theme='dark'] .day-label::before {
+  box-shadow: 0 0 10px var(--color-accent);
+}
+
+/* ------------------------------------------------------------------ *
  * The home screen's total card.
  * Light: calm glass with a faint aurora. Dark: a rainbow border that slowly
  * turns, an aurora drifting inside, and a few ₹ floating up through it.

@@ -1,8 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { formatPaise } from '@shared/money';
 import type { TransactionView } from '@shared/domain';
-import { IconBadge } from './ui/primitives';
-import { KIND_META } from '../lib/kinds';
+import { KIND_HUES, KIND_META } from '../lib/kinds';
 import { usePrefs } from '../store/prefs';
 import { cn } from '../lib/cn';
 
@@ -42,7 +41,12 @@ export function TransactionRow({
         reversed && 'opacity-55',
       )}
     >
-      <IconBadge tone={meta.tone}>{meta.icon}</IconBadge>
+      <span
+        style={{ '--tone': KIND_HUES[transaction.kind] } as React.CSSProperties}
+        className="tone-icon grid size-10 shrink-0 place-items-center rounded-[14px] [&>svg]:size-[19px]"
+      >
+        {meta.icon}
+      </span>
 
       <span className="min-w-0 flex-1">
         <span
@@ -59,7 +63,7 @@ export function TransactionRow({
       </span>
 
       <span className="shrink-0 text-right">
-        <span className={cn('tnum block text-[15px] font-medium', amountTone)}>
+        <span className={cn('tnum block text-[15px] font-semibold', amountTone, meta.direction === 'in' && 'glow-positive')}>
           {hidden ? '••••' : `${sign}${formatPaise(transaction.amount)}`}
         </span>
         {transaction.labels.people.length > 1 && !hidePerson && (

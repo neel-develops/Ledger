@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Archive, ArrowLeft, HandCoins, MessageCircle, Receipt, Scale } from 'lucide-react';
+import { Archive, ArrowLeft, FileText, HandCoins, MessageCircle, Receipt, Scale } from 'lucide-react';
 import { buildReminder, sendReminder } from '../lib/reminder';
 import { formatPaise } from '@shared/money';
 import type { TransactionView } from '@shared/domain';
@@ -15,6 +15,8 @@ import { ErrorState } from '../components/ErrorState';
 import { Button } from '../components/ui/Button';
 import { AddTransaction } from '../components/AddTransaction';
 import type { TransactionDraft } from '@shared/nlp';
+import { BillSheet } from '../components/BillSheet';
+import { useSession } from '../lib/auth-client';
 
 interface PersonLedger {
   person: {
@@ -36,6 +38,8 @@ export function PersonDetailScreen() {
   const [data, setData] = useState<PersonLedger | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [settling, setSettling] = useState(false);
+  const [billing, setBilling] = useState(false);
+  const { data: session } = useSession();
   const version = useLedger((s) => s.version);
   const refresh = useLedger((s) => s.refresh);
 
@@ -98,9 +102,24 @@ export function PersonDetailScreen() {
         </h1>
       </header>
 
-      <Card glass className="flex items-center gap-4 px-5 py-5">
-        {data ? <Avatar name={data.person.name} size={52} /> : <Skeleton className="size-[52px] rounded-full" />}
-        <div className="min-w-0 flex-1">
+      <div
+        style={
+          {
+            '--tone': net > 0 ? '#2fd3e0' : net < 0 ? '#ff5d73' : '#8583f0',
+            '--shine-delay': '150ms',
+          } as React.CSSProperties
+        }
+        className="kind-tile flex items-center gap-4 rounded-2xl px-5 py-5"
+      >
+        <span aria-hidden className="kind-glow" />
+        {data ? (
+          <span className="person-ring relative rounded-full p-[3px]">
+            <Avatar name={data.person.name} size={56} />
+          </span>
+        ) : (
+          <Skeleton className="size-[56px] rounded-full" />
+        )}
+        <div className="relative min-w-0 flex-1">
           {data ? (
             <>
               <p className="text-[13px] text-ink-soft">
@@ -133,7 +152,7 @@ export function PersonDetailScreen() {
             </div>
           )}
         </div>
-      </Card>
+      </div>
 
       {data && net !== 0 && (
         <div className="mt-4">
@@ -148,25 +167,35 @@ export function PersonDetailScreen() {
               : `Pay ${data.person.name} back`}
           </Button>
           {net > 0 && (
-            <Button
-              block
-              size="lg"
-              variant="secondary"
-              className="mt-2"
-              icon={<MessageCircle className="size-[18px]" />}
-              onClick={async () => {
-                const text = buildReminder(data.person, data.transactions);
-                if (!text) return;
-                const outcome = await sendReminder(text);
-                if (outcome === 'opened') toast('Opened WhatsApp — pick who to send it to.');
-              }}
-            >
-              Remind {data.person.name.split(/\s+/)[0]}
-            </Button>
+            <div className="mt-2 flex gap-2">
+              <Button
+                block
+                size="lg"
+                variant="secondary"
+                icon={<MessageCircle className="size-[18px]" />}
+                onClick={async () => {
+                  const text = buildReminder(data.person, data.transactions);
+                  if (!text) return;
+                  const outcome = await sendReminder(text);
+                  if (outcome === 'opened') toast('Opened WhatsApp — pick who to send it to.');
+                }}
+              >
+                Remind
+              </Button>
+              <Button
+                block
+                size="lg"
+                variant="secondary"
+                icon={<FileText className="size-[18px]" />}
+                onClick={() => setBilling(true)}
+              >
+                Share bill
+              </Button>
+            </div>
           )}
           <p className="mt-2 text-center text-[12.5px] text-ink-muted">
             {net > 0
-              ? 'The reminder opens in WhatsApp for you to edit before it goes anywhere.'
+              ? 'Send a text nudge, or a picture of everything between you. You pick who it goes to.'
               : `Opens with ${formatPaise(Math.abs(net))} filled in — change it for a part payment.`}
           </p>
         </div>
@@ -238,6 +267,15 @@ export function PersonDetailScreen() {
             />
           </List>
         </section>
+      )}
+
+      {data && (
+        <BillSheet
+          open={billing}
+          onClose={() => setBilling(false)}
+          personId={data.person.id}
+          fromName={session?.user?.name?.split(' ')[0] || 'me'}
+        />
       )}
 
       <AddTransaction

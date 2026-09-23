@@ -10,6 +10,10 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
+    // The integration suites boot an in-process Postgres and run every
+    // migration in beforeAll. That takes a few seconds normally and can pass
+    // ten on a busy machine, which was failing whole suites for no reason.
+    hookTimeout: 60_000,
     include: ["server/**/*.test.ts", "shared/**/*.test.ts", "src/**/*.test.ts", "tests/**/*.test.ts"],
   },
 });
